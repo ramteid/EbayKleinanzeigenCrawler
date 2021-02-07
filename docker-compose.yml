@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+    core:
+        restart: always
+        image: mcr.microsoft.com/dotnet/aspnet:5.0
+        
+        volumes:
+          # Adapt local path
+          - /share/Docker-Volumes/dotnet:/dotnet
+        
+        command: "/bin/sh -c 'while true; cd /dotnet/EbayKleinanzeigenCrawler; chmod +x EbayKleinanzeigenCrawler; ./EbayKleinanzeigenCrawler; do sleep 60;  done'"
