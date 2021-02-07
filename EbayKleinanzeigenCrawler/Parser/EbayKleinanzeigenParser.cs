@@ -110,7 +110,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                 return true;
             }
 
-            // For a keyword disjunction "foo | bar", one of the keywords must be included
+            // For a keyword "foo | bar", only one of the disjunct keywords must be included
             List<List<string>> disjunctionGroups = Subscription.IncludeKeywords
                 .Where(str => str.Contains("|"))
                 .Select(str => str.Split("|")
@@ -144,28 +144,5 @@ namespace EbayKleinanzeigenCrawler.Parser
 
             return Subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
         }
-
-        //private Uri GetSearchUrl()
-        //{
-        //    var searchKeys = string.Join("-", _searchRequest.QueryKeywords).ToLower().Replace(" ", "-");
-        //    var searchKey = HttpUtility.UrlEncode(searchKeys) + "/";
-
-        //    var price = _searchRequest.PriceMin != null && _searchRequest.PriceMax != null
-        //        ? $"preis:{_searchRequest.PriceMin}:{_searchRequest.PriceMax}/"
-        //        : "";
-
-        //    var zipCode = _searchRequest.ZipCode != null ? $"{_searchRequest.ZipCode}/" : "";
-        //    var zipCodeAlias = _searchRequest.ZipCodeAlias ?? "k0";
-        //    var radius = _searchRequest.Radius != null ? $"r{_searchRequest.Radius}" : "";
-
-        //    return new Uri("https://www.ebay-kleinanzeigen.de/s-wohnwagen-mobile/kastenwagen/preis:10000:35001/c220r200+wohnwagen_mobile.art_s:kastenwagen+wohnwagen_mobile.ez_i:2010,2020");
-
-        //    var category1 = "s-wohnwagen-mobile/";
-        //    var category2 = "kastenwagen/";
-        //    var paramArt = "+wohnwagen_mobile.art_s:kastenwagen";
-        //    var paramEz = "+wohnwagen_mobile.ez_i:2010,2020";
-
-        //    var urb = $"https://www.ebay-kleinanzeigen.de/{category1}{category2}{zipCode}{price}{searchKey}{zipCodeAlias}{radius}{paramArt}{paramEz}";
-        //}
     }
 }

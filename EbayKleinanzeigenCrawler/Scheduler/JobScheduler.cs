@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Jobs;
@@ -56,7 +57,7 @@ namespace EbayKleinanzeigenCrawler.Scheduler
             job.Execute(subscription, alreadyProcessedUrls);
         }
 
-        private void RestoreData()
+        private void RestoreData()  // TODO: move restoring logic into IDataStorage
         {
             try
             {
@@ -64,13 +65,21 @@ namespace EbayKleinanzeigenCrawler.Scheduler
                 _alreadyProcessedUrls = data;
                 _logger.Information($"Restored processed URLs for {data.Count} subscriptions");
             }
-            catch (Exception e)
+            catch (FileNotFoundException e)
             {
                 if (_alreadyProcessedUrls is null)
                 {
                     _alreadyProcessedUrls = new ConcurrentDictionary<Guid, List<Uri>>();
                 }
-                _logger.Warning(e, $"Error when restoring List of already processed Urls: {e.Message}");
+
+                if (e is FileNotFoundException)
+                {
+                    _logger.Warning($"Could not restore subscribers: {e.Message}");
+                }
+                else
+                {
+                    _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
+                }
             }
         }
 
