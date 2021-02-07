@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using EbayKleinanzeigenCrawler.Interfaces;
@@ -185,12 +186,6 @@ namespace EbayKleinanzeigenCrawler.Manager
             subscriber.State = TelegramInputState.Idle;
         }
 
-        private void StartAddingSubscription(TelegramSubscriber subscriber)
-        {
-            SendMessage(subscriber, "Paste the URL of a Ebay Kleinanzeigen search page. Use most detailed search filters.");
-            subscriber.State = TelegramInputState.WaitingForUrl; // TODO: validate URL
-        }
-
         private void DeleteAllSubscriptions(TelegramSubscriber subscriber)
         {
             subscriber.Subscriptions.Clear();
@@ -234,17 +229,25 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, restored ? "Subscriber list restored" : "Failed to restore subscriber list");
         }
 
+        private void StartAddingSubscription(TelegramSubscriber subscriber)
+        {
+            SendMessage(subscriber, "Paste the URL of a Ebay Kleinanzeigen search page. Use most exact search filters and avoid too many results.");
+            SendMessage(subscriber, "Currently, no URLs of mobile devices are supported. The URL must begin with 'https://www.ebay-kleinanzeigen.de/....'"); // TODO: Verify URL instead
+            subscriber.State = TelegramInputState.WaitingForUrl;
+        }
+
         private void AnalyzeInputUrl(string messageText, TelegramSubscriber subscriber)
         {
             bool validUrl = Uri.TryCreate(messageText, UriKind.Absolute, out Uri url);
-            if (!validUrl) // TODO: Call validation within parser
+            if (!validUrl)  // TODO: Create proper URL validation in Parser class and call it from here
             {
                 throw new InvalidOperationException("This doesn't seem to be a valid URL. Please try again.");
             }
 
             subscriber.IncompleteSubscription = new Subscription { QueryUrl = url };
             subscriber.State = TelegramInputState.WaitingForIncludeKeywords;
-            SendMessage(subscriber, "Ok. Enter description keywords to include. Separate by \",\" and define alternatives by \"|\". Or write '/skip'");
+            SendMessage(subscriber, "Ok. Enter keywords which must all be included in title or description. Separate by \",\" and define alternatives by \"|\". Or write '/skip'");
+            SendMessage(subscriber, "Example: 'one, two|three' will find results where 'one' and 'two' are words in the description; but it will also find results with 'one' and 'three'.");
         }
 
         private void AnalyzeInputIncludeKeywords(string messageText, TelegramSubscriber subscriber)
@@ -259,7 +262,8 @@ namespace EbayKleinanzeigenCrawler.Manager
             subscriber.IncompleteSubscription.IncludeKeywords = includeKeywords;
             SendMessage(subscriber, $"Ok. I got {includeKeywords.Count} keywords to include.");
             subscriber.State = TelegramInputState.WaitingForExcludeKeywords;
-            SendMessage(subscriber, "Enter description keywords to exclude, separated by \",\" or write '/skip'");
+            SendMessage(subscriber, "Enter keywords which must not appear in title or description, separated by \",\" or write '/skip'");
+            SendMessage(subscriber, "Hint: If only one of these keywords is found in title or description, there will be no notification.");
         }
 
         private void AnalyzeInputExcludeKeywords(string messageText, TelegramSubscriber subscriber)
@@ -342,7 +346,15 @@ namespace EbayKleinanzeigenCrawler.Manager
                     _subscriberList = new ConcurrentBag<TelegramSubscriber>();
                 }
 
-                _logger.Warning(e, $"Error when restoring subscribers: {e.Message}");
+                if (e is FileNotFoundException)
+                {
+                    _logger.Warning($"Could not restore subscribers: {e.Message}");
+                }
+                else
+                {
+                    _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
+                }
+
                 return false;
             }
 

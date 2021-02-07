@@ -31,10 +31,6 @@ namespace EbayKleinanzeigenCrawler.Infrastructure
 
             Logger logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
-                //.MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-                //.MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
-                //.MinimumLevel.Override("System", LogEventLevel.Warning)
-                //.MinimumLevel.Override("Microsoft.AspNetCore.Authentication", LogEventLevel.Information)
                 .Enrich.FromLogContext()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", theme: AnsiConsoleTheme.Code)
                 .WriteTo.File(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", path: "logfile.txt", rollOnFileSizeLimit: true, fileSizeLimitBytes: 1*1024*1024)
