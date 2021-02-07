@@ -8,14 +8,14 @@ using Serilog;
 
 namespace EbayKleinanzeigenCrawler.Query
 {
-    public class QueryExecutor<TParams> where TParams : QueryParams
+    public class QueryExecutor
     {
         private readonly ConcurrentDictionary<Uri, (DateTime dateAdded, HtmlDocument html)> _uriCache = new ConcurrentDictionary<Uri, (DateTime, HtmlDocument)>();
         private readonly QueryCounter _queryCounter;
         private readonly ILogger _logger;
 
         // TODO: invalid HTML should be parser-specific and known to IParser implementation only
-        private const string InvalidHtml = ;
+        private const string InvalidHtml = "<html><head><meta charset=\"utf-8\"><script>";
 
         public QueryExecutor(ILogger logger, QueryCounter queryCounter)
         {

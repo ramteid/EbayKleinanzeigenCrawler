@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
 using EbayKleinanzeigenCrawler.Infrastructure;
 using EbayKleinanzeigenCrawler.Scheduler;
+using Serilog;
 
 namespace EbayKleinanzeigenCrawler
 {
@@ -14,6 +14,7 @@ namespace EbayKleinanzeigenCrawler
             AutofacConfig.IoCConfiguration();
 
             await using ILifetimeScope scope = AutofacConfig.Container.BeginLifetimeScope();
+            var logger = scope.Resolve<ILogger>();
             var scheduler = scope.Resolve<JobScheduler>();
 
             try
@@ -22,8 +23,7 @@ namespace EbayKleinanzeigenCrawler
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
-                Thread.Sleep(TimeSpan.FromSeconds(15));
+                logger.Error(e, "Exception terminated application");
             }
         }
     }

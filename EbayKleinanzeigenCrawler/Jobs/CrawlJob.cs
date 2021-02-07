@@ -17,7 +17,7 @@ namespace EbayKleinanzeigenCrawler.Jobs
         private readonly ILogger _logger;
         private IParser _parser;
 
-        public CrawlJob(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger)
+        public CrawlJob(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger, QueryExecutor queryExecutor)
         {
             _outgoingNotifications = outgoingNotifications;
             _parserProvider = parserProvider;
