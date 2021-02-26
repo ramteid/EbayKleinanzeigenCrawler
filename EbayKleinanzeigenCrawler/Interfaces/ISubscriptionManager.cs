@@ -5,6 +5,6 @@ namespace EbayKleinanzeigenCrawler.Interfaces
 {
     public interface ISubscriptionManager
     {
-        List<Subscription> GetDistinctSubscriptions();
+        List<Subscription> GetDistinctEnabledSubscriptions();
     }
 }

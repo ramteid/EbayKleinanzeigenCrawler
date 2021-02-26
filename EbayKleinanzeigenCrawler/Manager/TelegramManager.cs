@@ -1,13 +1,13 @@
-﻿using System;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Manager.Telegram;
+using EbayKleinanzeigenCrawler.Models;
+using Serilog;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Manager.Telegram;
-using EbayKleinanzeigenCrawler.Models;
-using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Args;
 using Telegram.Bot.Types.Enums;
@@ -80,7 +80,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             foreach (TelegramSubscriber subscriber in subscribers)
             {
                 // As it is possible that multiple subscribers have the same subscription, this subscription could be an equal one from another subscriber
-                var exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription));
+                Subscription exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription) && s.Enabled);
 
                 string message = $"New result: {newResult.Link} \n" +                       // TODO: display price
                                  $"{exactSubscription.Title} - {newResult.CreationDate}";   // TODO: Amend Title of already sent notification to avoid duplicate notifications for two subscriptions
@@ -88,10 +88,11 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
         }
 
-        public List<Subscription> GetDistinctSubscriptions()
+        public List<Subscription> GetDistinctEnabledSubscriptions()
         {
             return _subscriberList
                 .SelectMany(s => s.Subscriptions)
+                .Where(s => s.Enabled)
                 .Distinct()
                 .ToList();
         }
@@ -202,7 +203,8 @@ namespace EbayKleinanzeigenCrawler.Manager
                            $"*Title*: {EscapeMarkdownV2Characters(subscription.Title)} \n" +
                            $"*URL*: {EscapeMarkdownV2Characters(subscription.QueryUrl.ToString())} \n" +
                            $"*Included keywords*: {EscapeMarkdownV2Characters(string.Join(", ", subscription.IncludeKeywords))} \n" +
-                           $"*Excluded keywords*: {EscapeMarkdownV2Characters(string.Join(", ", subscription.ExcludeKeywords))}";
+                           $"*Excluded keywords*: {EscapeMarkdownV2Characters(string.Join(", ", subscription.ExcludeKeywords))} \n" +
+                           $"*Enabled*: {subscription.Enabled}";
             }
 
             SendMessage(subscriber, message, disableWebPagePreview: true, parseMode: ParseMode.MarkdownV2);
