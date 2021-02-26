@@ -1,12 +1,12 @@
-﻿using System;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Jobs;
+using EbayKleinanzeigenCrawler.Models;
+using Serilog;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Jobs;
-using EbayKleinanzeigenCrawler.Models;
-using Serilog;
 
 namespace EbayKleinanzeigenCrawler.Scheduler
 {
@@ -35,8 +35,8 @@ namespace EbayKleinanzeigenCrawler.Scheduler
         {
             while (true)
             {
-                List<Subscription> subscriptions = _subscriptionManager.GetDistinctSubscriptions();
-                _logger.Information($"Found {subscriptions.Count} distinct subscriptions");
+                List<Subscription> subscriptions = _subscriptionManager.GetDistinctEnabledSubscriptions();
+                _logger.Information($"Found {subscriptions.Count} distinct enabled subscriptions");
                 foreach (Subscription subscription in subscriptions)
                 {
                     _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
@@ -44,7 +44,7 @@ namespace EbayKleinanzeigenCrawler.Scheduler
                     _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
                 }
                 SaveData();
-                
+
                 _logger.Information("Processed all subscriptions. Waiting 5 minutes...");
                 Thread.Sleep(TimeSpan.FromMinutes(5));
             }
@@ -65,12 +65,9 @@ namespace EbayKleinanzeigenCrawler.Scheduler
                 _alreadyProcessedUrls = data;
                 _logger.Information($"Restored processed URLs for {data.Count} subscriptions");
             }
-            catch (FileNotFoundException e)
+            catch (Exception e)
             {
-                if (_alreadyProcessedUrls is null)
-                {
-                    _alreadyProcessedUrls = new ConcurrentDictionary<Guid, List<Uri>>();
-                }
+                _alreadyProcessedUrls ??= new ConcurrentDictionary<Guid, List<Uri>>();
 
                 if (e is FileNotFoundException)
                 {

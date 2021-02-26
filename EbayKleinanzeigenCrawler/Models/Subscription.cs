@@ -12,6 +12,7 @@ namespace EbayKleinanzeigenCrawler.Models
         public List<string> IncludeKeywords { get; set; }
         public List<string> ExcludeKeywords { get; set; }
         public bool InitialPull { get; set; }
+        public bool Enabled { get; set; }
 
         public Subscription()
         {
