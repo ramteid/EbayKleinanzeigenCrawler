@@ -313,6 +313,7 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         private void FinalizeSubscription(TelegramSubscriber subscriber)
         {
+            subscriber.IncompleteSubscription.Enabled = true;
             subscriber.Subscriptions.Add(subscriber.IncompleteSubscription);
             subscriber.IncompleteSubscription = null;
             subscriber.State = TelegramInputState.Idle;
