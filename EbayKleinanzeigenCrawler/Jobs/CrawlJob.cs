@@ -69,10 +69,10 @@ namespace EbayKleinanzeigenCrawler.Jobs
 
                 HtmlDocument documentNextPage = _queryExecutor.GetHtml(page, useCache: false);
 
-                var linksFromAdditionalPage = _parser.ParseLinks(documentNextPage).ToList();
+                List<Result> linksFromAdditionalPage = _parser.ParseLinks(documentNextPage).ToList();
                 _logger.Information($"Found {linksFromAdditionalPage.Count} links on page {i + 2}");
 
-                var newLinksFromAdditionalPage = linksFromAdditionalPage.Where(l => !alreadyProcessedLinks.Contains(l.Link)).ToList();
+                List<Result> newLinksFromAdditionalPage = linksFromAdditionalPage.Where(l => !alreadyProcessedLinks.Contains(l.Link)).ToList();
                 _logger.Information($"{newLinksFromAdditionalPage.Count} links of them are new");
                 
                 // Arrange the oldest entries at the beginning
@@ -81,7 +81,7 @@ namespace EbayKleinanzeigenCrawler.Jobs
                 newResults.AddRange(newLinksFromAdditionalPage);
             }
 
-            var results = _parser.ParseLinks(document).ToList();
+            List<Result> results = _parser.ParseLinks(document).ToList();
             _logger.Information($"Found {results.Count} links on page 1");
 
             List<Result> newResultsPage1 = results.Where(l => !alreadyProcessedLinks.Contains(l.Link)).ToList();

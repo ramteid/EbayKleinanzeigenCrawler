@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using EbayKleinanzeigenCrawler.Interfaces;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace EbayKleinanzeigenCrawler.Parser
 {
@@ -37,7 +37,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                 throw new HtmlParseException("Invalid HTML detected. Skipping parsing");
             }
 
-            var results = resultPage.DocumentNode
+            List<IEnumerable<HtmlNode>> results = resultPage.DocumentNode
                 .Descendants("article")
                 .Where(div => div.GetAttributeValue("class", "").Contains("aditem"))
                 .Select(d => d.Descendants())
@@ -45,7 +45,7 @@ namespace EbayKleinanzeigenCrawler.Parser
 
             foreach (IEnumerable<HtmlNode> result in results)
             {
-                var link = result
+                Uri? link = result
                     .Where(d => d.Attributes.Any(a => a.Value == "aditem-main"))
                     .SelectMany(d => d.Descendants())
                     .Where(d => d.Name == "a")
@@ -54,7 +54,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                     .Select(l => new Uri($"https://www.ebay-kleinanzeigen.de{l.Value}"))
                     .SingleOrDefault();
 
-                var date = result
+                string date = result
                     .SingleOrDefault(d => d.Attributes.Any(a => a.Value == "aditem-addon"))?
                     .InnerText?.Trim();
 
@@ -94,7 +94,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                 .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-title"))?
                 .InnerHtml;
         }
-        
+
         private string ParseDescriptionText(HtmlDocument document)
         {
             return document.DocumentNode
@@ -113,13 +113,14 @@ namespace EbayKleinanzeigenCrawler.Parser
             // For a keyword "foo | bar", only one of the disjunct keywords must be included
             List<List<string>> disjunctionGroups = Subscription.IncludeKeywords
                 .Where(str => str.Contains("|"))
-                .Select(str => str.Split("|")
+                .Select(str => str
+                    .Split("|")
                     .Select(keyword => keyword.Trim())
                     .ToList()
                 )
                 .ToList();
 
-            foreach (var group in disjunctionGroups)
+            foreach (List<string> group in disjunctionGroups)
             {
                 bool anyOfGroupInText = group.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
                 if (!anyOfGroupInText)

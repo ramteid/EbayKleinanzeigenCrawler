@@ -1,6 +1,6 @@
 ﻿namespace EbayKleinanzeigenCrawler.Models
 {
-    public enum TelegramInputState
+    public enum InputState
     {
         Idle,
         WaitingForUrl,
