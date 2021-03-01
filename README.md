@@ -1,5 +1,5 @@
 # EbayKleinanzeigenCrawler
-.Net 5.0 based crawler that parses Ebay Kleinanzeigen ads and notifies via a Telegram Bot.
+.Net 5.0 based crawler that parses Ebay Kleinanzeigen classified ads and notifies via a Telegram Bot.
 
 # Features:
 * Notifies you reliably about new articles within 5 minutes!
@@ -8,7 +8,7 @@
 * Specify a subscription by simply copying the URL from your browser
 * Uses Telegram as interface for notifications and control
 * Supports multiple Subscribers and Subscriptions
-* You can easily add different interfaces (E-Mail, SMS, ...)
+* You can easily add different interfaces (Console, E-Mail, SMS, ...)
 * Persists data in JSON files
 
 # Before use:
