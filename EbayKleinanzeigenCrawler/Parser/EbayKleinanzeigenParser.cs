@@ -32,31 +32,49 @@ namespace EbayKleinanzeigenCrawler.Parser
 
         public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
         {
+            // TODO: An URL with query params seems to forget the query keywords and searches for anything. Do not allow ? in URLs.
+            // e.g. /s-anzeigen/96123/anzeige:angebote/lescha-betonmischer/c0-l6895?distance=50&maxPrice=100
             if (resultPage.Text.StartsWith(InvalidHtml))
             {
                 throw new HtmlParseException("Invalid HTML detected. Skipping parsing");
             }
 
-            List<IEnumerable<HtmlNode>> results = resultPage.DocumentNode
+            List<HtmlNode> results = resultPage.DocumentNode
+                .SelectNodes("//ul[@id='srchrslt-adtable']")?
                 .Descendants("article")
                 .Where(div => div.GetAttributeValue("class", "").Contains("aditem"))
-                .Select(d => d.Descendants())
                 .ToList();
 
-            foreach (IEnumerable<HtmlNode> result in results)
+            if (results is null)
             {
-                Uri? link = result
-                    .Where(d => d.Attributes.Any(a => a.Value == "aditem-main"))
-                    .SelectMany(d => d.Descendants())
-                    .Where(d => d.Name == "a")
-                    .Select(d => d.Attributes.SingleOrDefault(d => d.Name == "href"))
-                    .Where(d => !d.Value.Contains("/pro/")) // Filter out Pro-Shop links
+                // When no results are found
+                yield break;
+            }
+
+            foreach (HtmlNode result in results)
+            {
+                var isProShopLink = result
+                    .Descendants("div")
+                    .Where(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"))
+                    .Any();
+
+                if (isProShopLink)
+                {
+                    // Filter out Pro-Shop links
+                    continue;
+                }
+
+                Uri link = result
+                    .SelectNodes("div[@class='aditem-main']//h2//a")
+                    .Select(n => n.Attributes.Single(a => a.Name == "href"))
                     .Select(l => new Uri($"https://www.ebay-kleinanzeigen.de{l.Value}"))
                     .SingleOrDefault();
 
                 string date = result
-                    .SingleOrDefault(d => d.Attributes.Any(a => a.Value == "aditem-addon"))?
-                    .InnerText?.Trim();
+                    .SelectNodes("div[@class='aditem-addon']")
+                    .Select(d => d.InnerText)
+                    .SingleOrDefault()
+                    .Trim();
 
                 yield return new Result { Link = link, CreationDate = date };
             }
