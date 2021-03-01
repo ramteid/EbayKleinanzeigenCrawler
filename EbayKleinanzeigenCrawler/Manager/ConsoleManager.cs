@@ -3,6 +3,7 @@ using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
 using Serilog;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace EbayKleinanzeigenCrawler.Manager
@@ -34,6 +35,7 @@ namespace EbayKleinanzeigenCrawler.Manager
                 {
                     string input = Console.ReadLine();
                     ProcessCommand(ConsoleSubscriberId, input);
+                    Thread.Sleep(TimeSpan.FromMilliseconds(500));
                 }
             });
         }
