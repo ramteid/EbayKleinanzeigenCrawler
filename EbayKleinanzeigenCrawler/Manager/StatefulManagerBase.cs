@@ -176,7 +176,7 @@ namespace EbayKleinanzeigenCrawler.Manager
         private void ReloadSubscriberFile(Subscriber<TId> subscriber)
         {
             bool restored = RestoreData();
-            SendMessage(subscriber, restored ? "Subscriber<TSubscriberId> list restored" : "Failed to restore subscriber list");
+            SendMessage(subscriber, restored ? "Subscriber list restored" : "Failed to restore subscriber list");
         }
 
         private void StartAddingSubscription(Subscriber<TId> subscriber)
