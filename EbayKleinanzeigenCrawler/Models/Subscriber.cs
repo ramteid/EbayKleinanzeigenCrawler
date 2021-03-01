@@ -2,12 +2,17 @@
 
 namespace EbayKleinanzeigenCrawler.Models
 {
-    public class Subscriber
+    public class Subscriber<TId>
     {
+        public TId Id { get; set; }
+        public InputState State { get; set; }
+        public Subscription IncompleteSubscription { get; set; }
+
         public List<Subscription> Subscriptions { get; set; }
 
-        protected Subscriber()
+        public Subscriber()
         {
+            State = InputState.Idle;
             Subscriptions = new List<Subscription>();
         }
     }

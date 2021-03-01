@@ -66,13 +66,13 @@ namespace EbayKleinanzeigenCrawler.Query
         /// <param name="alreadyProcessedUrls">List of already processed URLs</param>
         public void FreeCache(List<Uri> alreadyProcessedUrls)
         {
-            foreach (var url in alreadyProcessedUrls)
+            foreach (Uri url in alreadyProcessedUrls)
             {
                 if (_uriCache.TryGetValue(url, out (DateTime dateAdded, HtmlDocument html) cachedEntry)) // TODO: check if it makes sense to remove an already processed URL from the cache immediately.
                 {
                     if (cachedEntry.dateAdded < DateTime.Now - TimeSpan.FromDays(1))
                     {
-                        _uriCache.Remove(url, out var _);
+                        _uriCache.Remove(url, out (DateTime dateAdded, HtmlDocument html) _);
                     }
                 }
             }
