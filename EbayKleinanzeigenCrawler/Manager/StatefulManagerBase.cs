@@ -31,21 +31,29 @@ namespace EbayKleinanzeigenCrawler.Manager
         {
             Logger.Information($"Sender: {clientId}, Message: \"{message}\"");
 
-            Subscriber<TId> subscriber = SubscriberList.SingleOrDefault(s => s.Id.Equals(clientId));
-            if (subscriber is null)
-            {
-                subscriber = new Subscriber<TId> { Id = clientId };
-                SubscriberList.Add(subscriber);
-                SaveData();
-            }
-
+            Subscriber<TId> subscriber = null;
             try
             {
+                subscriber = SubscriberList.SingleOrDefault(s => s.Id.Equals(clientId));
+                if (subscriber is null)
+                {
+                    subscriber = new Subscriber<TId> { Id = clientId };
+                    SubscriberList.Add(subscriber);
+                    SaveData();
+                }
+
                 HandleState(subscriber, message);
             }
             catch (Exception exception)
             {
-                SendMessage(subscriber, $"Error: {exception.Message}"); // TODO: Handle Exceptions from SendMessage()?
+                if (subscriber is not null)
+                {
+                    SendMessage(subscriber, $"Error: {exception.Message}"); // TODO: Handle Exceptions from SendMessage()?
+                }
+                else
+                {
+                    Logger.Error(exception, $"Error: { exception.Message}");
+                }
             }
         }
 
@@ -64,7 +72,7 @@ namespace EbayKleinanzeigenCrawler.Manager
                 Subscription exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription) && s.Enabled);
 
                 string message = $"New result: {newResult.Link} \n" +                       // TODO: display price
-                                 $"{exactSubscription.Title} - {newResult.CreationDate}";   // TODO: Amend Title of already sent notification to avoid duplicate notifications for two subscriptions
+                                 $"{exactSubscription.Title} - {newResult.CreationDate} - {newResult.Price}";   // TODO: Amend Title of already sent notification to avoid duplicate notifications for two subscriptions
                 SendMessage(subscriber, message);
             }
         }

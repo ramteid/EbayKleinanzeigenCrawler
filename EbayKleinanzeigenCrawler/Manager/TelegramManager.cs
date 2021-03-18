@@ -5,6 +5,7 @@ using System;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
 namespace EbayKleinanzeigenCrawler.Manager
@@ -46,13 +47,21 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         private void SendMessage(Subscriber<long> subscriber, string message, bool enablePreview, ParseMode parseMode)
         {
-            _botClient.SendTextMessageAsync(
+            Message result = _botClient.SendTextMessageAsync(
                 chatId: subscriber.Id,
                 text: message,
                 parseMode: parseMode,
-                disableWebPagePreview: enablePreview
-            ).Wait();
-            Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");  // TODO: Add Admin-Notifications, e.g. for accumulated parsing failures
+                disableWebPagePreview: !enablePreview
+            ).Result;
+
+            if (result?.MessageId is null)
+            {
+                Logger.Error($"Error when sending message to Recipient: { subscriber.Id}, Message: \"{message}\"");
+            }
+            else
+            {
+                Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");  // TODO: Add Admin-Notifications, e.g. for accumulated parsing failures
+            }
         }
 
         protected override void DisplaySubscriptionList(Subscriber<long> subscriber)

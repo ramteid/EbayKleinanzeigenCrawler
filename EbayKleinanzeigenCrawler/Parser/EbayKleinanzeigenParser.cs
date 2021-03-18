@@ -1,6 +1,7 @@
 ﻿using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,12 +10,14 @@ namespace EbayKleinanzeigenCrawler.Parser
 {
     public class EbayKleinanzeigenParser : IParser
     {
+        private readonly ILogger _logger;
         private Subscription Subscription { get; }
 
         private const string InvalidHtml = "<html><head><meta charset=\"utf-8\"><script>"; // When the source code is obfuscated with JS
 
-        public EbayKleinanzeigenParser(Subscription subscription)
+        public EbayKleinanzeigenParser(ILogger logger, Subscription subscription)
         {
+            _logger = logger;
             Subscription = subscription;
         }
 
@@ -53,10 +56,9 @@ namespace EbayKleinanzeigenCrawler.Parser
 
             foreach (HtmlNode result in results)
             {
-                var isProShopLink = result
+                bool isProShopLink = result
                     .Descendants("div")
-                    .Where(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"))
-                    .Any();
+                    .Any(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"));
 
                 if (isProShopLink)
                 {
@@ -65,18 +67,43 @@ namespace EbayKleinanzeigenCrawler.Parser
                 }
 
                 Uri link = result
-                    .SelectNodes("div[@class='aditem-main']//h2//a")
-                    .Select(n => n.Attributes.Single(a => a.Name == "href"))
+                    .SelectNodes("div[@class='aditem-main']//h2//a")?
+                    .Select(n => n.Attributes.SingleOrDefault(a => a.Name == "href"))
+                    .Where(l => l is not null)
                     .Select(l => new Uri($"https://www.ebay-kleinanzeigen.de{l.Value}"))
                     .SingleOrDefault();
 
-                string date = result
-                    .SelectNodes("div[@class='aditem-addon']")
+                string price = result
+                    .SelectNodes("div/div/p[@class='aditem-main--middle--price']")?
                     .Select(d => d.InnerText)
-                    .SingleOrDefault()
+                    .SingleOrDefault()?
+                    .Trim();
+                
+                string date = result
+                    .SelectNodes("div/div/div[@class='aditem-main--top--right']")?
+                    .Select(d => d.InnerText)
+                    .SingleOrDefault()?
                     .Trim();
 
-                yield return new Result { Link = link, CreationDate = date };
+                // TODO: Write some error statistics and notify admin about too many errors to detect changed HTML syntax
+
+                if (link is null)
+                {
+                    _logger.Error("Could not parse link");
+                    continue;
+                }
+
+                if (date is null)
+                {
+                    _logger.Error("Could not parse date");
+                }
+                
+                if (price is null)
+                {
+                    _logger.Error("Could not parse price");
+                }
+
+                yield return new Result { Link = link, CreationDate = date ?? "?" , Price = price ?? ?};
             }
         }
 
