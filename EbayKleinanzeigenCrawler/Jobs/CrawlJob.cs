@@ -58,6 +58,7 @@ namespace EbayKleinanzeigenCrawler.Jobs
         {
             HtmlDocument document = _queryExecutor.GetHtml(subscription.QueryUrl, useCache: false);
 
+            // TODO: Only check additional pages, if it's the first run for the subscription OR the first run after application restart
             List<Uri> additionalPages = _parser.GetAdditionalPages(document); // TODO: Limit to n pages?
             _logger.Information($"{additionalPages.Count} additional pages found");
 
@@ -113,8 +114,6 @@ namespace EbayKleinanzeigenCrawler.Jobs
                     continue;
                 }
 
-                alreadyProcessedLinks.Add(result.Link);
-
                 if (match)
                 {
                     if (firstRun && !subscription.InitialPull)
@@ -130,6 +129,8 @@ namespace EbayKleinanzeigenCrawler.Jobs
                 {
                     _logger.Debug($"No match: {result.Link}");
                 }
+
+                alreadyProcessedLinks.Add(result.Link);
             }
         }
     }
