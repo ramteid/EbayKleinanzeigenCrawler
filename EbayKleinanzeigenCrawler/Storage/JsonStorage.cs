@@ -2,15 +2,23 @@
 using System.Text;
 using EbayKleinanzeigenCrawler.Interfaces;
 using Newtonsoft.Json;
+using Serilog;
 
 namespace EbayKleinanzeigenCrawler.Storage
 {
     public class JsonStorage : IDataStorage
     {
         private readonly object _lockObject = new object();
+        private readonly ILogger _logger;
+
+        public JsonStorage(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         public void Save<T>(T data, string fileName)
         {
+            _logger.Verbose($"Saving data to file {fileName}");
             lock (_lockObject)
             {
                 string jsonString = JsonConvert.SerializeObject(data, new JsonSerializerSettings { Formatting = Formatting.Indented });
@@ -24,6 +32,7 @@ namespace EbayKleinanzeigenCrawler.Storage
         /// <exception cref="JsonException">Is thrown if the file doesn't exist</exception>
         public void Load<T>(string fileName, out T data)
         {
+            _logger.Verbose($"Loading data from file {fileName}");
             lock (_lockObject)
             {
                 string jsonString = File.ReadAllText(fileName);
