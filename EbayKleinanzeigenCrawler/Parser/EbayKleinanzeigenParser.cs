@@ -103,7 +103,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                     _logger.Error("Could not parse price");
                 }
 
-                yield return new Result { Link = link, CreationDate = date ?? "?" , Price = price ?? ?};
+                yield return new Result { Link = link, CreationDate = date ?? "?" , Price = price ?? "?"};
             }
         }
 
@@ -124,7 +124,7 @@ namespace EbayKleinanzeigenCrawler.Parser
 
             if (title is null || descriptionText is null)
             {
-                throw new HtmlParseException("Could not parse title or description text");
+                throw new NullReferenceException("Could not parse title or description text");
             }
 
             bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(title + descriptionText);
