@@ -4,8 +4,7 @@ EbayKleinanzeigenCrawler/Properties/PublishProfiles/
 */*.csproj.user
 .vs/
 .vscode/
-TestResults/
-.env
-**/Subscriptions.json
-**/AlreadyProcessedUrls.json
-**/logfile.txt
+.devcontainer/
+**.json
+**.txt
+
