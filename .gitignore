@@ -1,3 +1,4 @@
+EbayKleinanzeigenCrawler/data/
 EbayKleinanzeigenCrawler/obj/
 EbayKleinanzeigenCrawler/bin/
 EbayKleinanzeigenCrawler/Properties/PublishProfiles/
@@ -6,6 +7,6 @@ EbayKleinanzeigenCrawler/Properties/PublishProfiles/
 .vscode/
 TestResults/
 .env
-**/Subscriptions.json
+**/Subscribers.json
 **/AlreadyProcessedUrls.json
 **/logfile.txt

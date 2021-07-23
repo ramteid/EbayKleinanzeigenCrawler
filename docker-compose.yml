@@ -6,7 +6,7 @@ services:
         build: .
         
         volumes:
-          - ebay-bot-volume:/app
+          - ebay-bot-volume:/bot/data
 
         environment:
             # This variable is taken from the environment. You can use .env-files for this.
