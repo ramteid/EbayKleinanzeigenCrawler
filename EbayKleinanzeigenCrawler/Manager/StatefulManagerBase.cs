@@ -17,6 +17,8 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         protected StatefulManagerBase(IDataStorage dataStorage, ILogger logger)
         {
+            Directory.CreateDirectory("data");
+            
             DataStorage = dataStorage;
             Logger = logger;
             SubscriberList = new ConcurrentBag<Subscriber<TId>>();
@@ -295,7 +297,7 @@ namespace EbayKleinanzeigenCrawler.Manager
         {
             try
             {
-                DataStorage.Load("Subscribers.json", out ConcurrentBag<Subscriber<TId>> data);
+                DataStorage.Load(Path.Join("data", "Subscribers.json"), out ConcurrentBag<Subscriber<TId>> data);
                 SubscriberList = data;
                 Logger.Information($"Restored data: {data.Count} Subscribers");
             }
@@ -320,7 +322,7 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         private void SaveData()
         {
-            DataStorage.Save(SubscriberList, "Subscribers.json");
+            DataStorage.Save(SubscriberList, Path.Join("data", "Subscribers.json"));
         }
     }
 }
