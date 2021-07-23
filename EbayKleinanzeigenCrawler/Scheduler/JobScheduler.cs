@@ -61,7 +61,7 @@ namespace EbayKleinanzeigenCrawler.Scheduler
         {
             try
             {
-                _dataStorage.Load("AlreadyProcessedUrls.json", out ConcurrentDictionary<Guid, List<Uri>> data); // TODO: remove URLs for deleted Subscriptions
+                _dataStorage.Load(Path.Join("data", "AlreadyProcessedUrls.json"), out ConcurrentDictionary<Guid, List<Uri>> data); // TODO: remove URLs for deleted Subscriptions
                 _alreadyProcessedUrls = data;
                 _logger.Information($"Restored processed URLs for {data.Count} subscriptions");
             }
@@ -82,7 +82,7 @@ namespace EbayKleinanzeigenCrawler.Scheduler
 
         private void SaveData()
         {
-            _dataStorage.Save(_alreadyProcessedUrls, "AlreadyProcessedUrls.json");
+            _dataStorage.Save(_alreadyProcessedUrls, Path.Join("data", "AlreadyProcessedUrls.json"));
         }
     }
 }

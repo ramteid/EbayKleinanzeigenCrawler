@@ -12,18 +12,20 @@ namespace EbayKleinanzeigenCrawler.Manager
 {
     public class TelegramManager : StatefulManagerBase<long>, IDisposable
     {
-        private const string TelegramBotToken = ""; // TODO: move to config file
+        private readonly string _telegramBotToken;
 
         private readonly ITelegramBotClient _botClient;
 
         public TelegramManager(IDataStorage dataStorage, ILogger logger) : base(dataStorage, logger)
         {
-            if (string.IsNullOrWhiteSpace(TelegramBotToken))
+            this._telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+
+            if (string.IsNullOrWhiteSpace(_telegramBotToken))
             {
                 throw new InvalidOperationException("Telegram Bot token was not specified. Please first create a bot and specify its token.");
             }
 
-            _botClient = new TelegramBotClient(TelegramBotToken);
+            _botClient = new TelegramBotClient(_telegramBotToken);
             _botClient.OnMessage += (_, e) => Bot_OnMessage(e);
             _botClient.StartReceiving();
         }

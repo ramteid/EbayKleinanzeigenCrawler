@@ -1,12 +1,16 @@
 version: '3'
 
 services:
-    core:
+    ebay-bot:
         restart: always
-        image: mcr.microsoft.com/dotnet/aspnet:5.0
+        build: .
         
         volumes:
-          # Adapt local path
-          - /share/Docker-Volumes/dotnet:/dotnet
-        
-        command: "/bin/sh -c 'while true; cd /dotnet/EbayKleinanzeigenCrawler; chmod +x EbayKleinanzeigenCrawler; ./EbayKleinanzeigenCrawler; do sleep 60;  done'"
+          - ebay-bot-volume:/bot/data
+
+        environment:
+            # This variable is taken from the environment. You can use .env-files for this.
+            TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+
+volumes:
+    ebay-bot-volume:
