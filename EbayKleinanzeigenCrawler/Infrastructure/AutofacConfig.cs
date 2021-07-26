@@ -1,4 +1,6 @@
-﻿using Autofac;
+﻿using System;
+using System.IO;
+using Autofac;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Jobs;
 using EbayKleinanzeigenCrawler.Manager;
@@ -29,11 +31,11 @@ namespace EbayKleinanzeigenCrawler.Infrastructure
             builder.RegisterType<JobFactory>().As<IJobFactory>();
             builder.RegisterType<JsonStorage>().As<IDataStorage>();
 
-            Logger logger = new LoggerConfiguration()
+            var logger = new LoggerConfiguration()
                 .MinimumLevel.Information()
                 .Enrich.FromLogContext()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", theme: AnsiConsoleTheme.Code)
-                .WriteTo.File(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", path: "logfile.txt", rollOnFileSizeLimit: true, fileSizeLimitBytes: 1 * 1024 * 1024)
+                .WriteTo.File(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", path: Path.Join("data", "logfile.txt"), rollOnFileSizeLimit: true, fileSizeLimitBytes: 1 * 1024 * 1024)
                 .CreateLogger();
 
             builder.Register<ILogger>((c, p) => logger).SingleInstance();
