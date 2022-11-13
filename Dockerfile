@@ -1,13 +1,13 @@
-FROM mcr.microsoft.com/dotnet/sdk:5.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /code
 
 COPY . /code
 RUN dotnet restore
 RUN dotnet build -c Release
 
-FROM mcr.microsoft.com/dotnet/runtime:5.0
+FROM mcr.microsoft.com/dotnet/runtime:6.0
 WORKDIR /bot
-COPY --from=build /code/EbayKleinanzeigenCrawler/bin/Release/net5.0 .
+COPY --from=build /code/EbayKleinanzeigenCrawler/bin/Release/net6.0 .
 RUN chmod +x EbayKleinanzeigenCrawler
 
 ENTRYPOINT ./EbayKleinanzeigenCrawler 

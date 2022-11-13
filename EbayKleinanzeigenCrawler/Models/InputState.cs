@@ -7,6 +7,7 @@
         WaitingForIncludeKeywords,
         WaitingForExcludeKeywords,
         WaitingForInitialPull,
-        WaitingForTitle
+        WaitingForTitle,
+        WaitingForSubscriptionToDelete
     }
 }

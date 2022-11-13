@@ -1,21 +1,23 @@
-﻿using Autofac;
-using EbayKleinanzeigenCrawler.Interfaces;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using System;
 
 namespace EbayKleinanzeigenCrawler.Parser
 {
     public class ParserProvider : IParserProvider
     {
-        private readonly ILifetimeScope _scope;
+        private readonly IServiceProvider _serviceProvider;
 
-        public ParserProvider(ILifetimeScope scope)
+        public ParserProvider(IServiceProvider serviceProvider)
         {
-            _scope = scope;
+            _serviceProvider = serviceProvider;
         }
 
         public IParser GetInstance(Subscription subscription)
         {
-            return _scope.Resolve<IParser>(new NamedParameter("subscription", subscription));
+            return new EbayKleinanzeigenParser(_serviceProvider.GetService<ILogger>(), subscription);
         }
     }
 }

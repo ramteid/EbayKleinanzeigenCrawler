@@ -1,5 +1,5 @@
 # EbayKleinanzeigenCrawler
-.NET 5.0 based crawler that parses Ebay Kleinanzeigen classified ads and notifies via a Telegram Bot.
+.NET 6 based crawler that parses Ebay Kleinanzeigen classified ads and notifies via a Telegram Bot.
 
 # Features:
 * Notifies you reliably about new articles within 5 minutes!

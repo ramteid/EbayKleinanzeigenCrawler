@@ -25,7 +25,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             RestoreData();
         }
 
-        protected abstract void SendMessage(Subscriber<TId> subscriber, string message);
+        protected abstract void SendMessage(Subscriber<TId> subscriber, string message, bool enablePreview = true);
 
         protected abstract void DisplaySubscriptionList(Subscriber<TId> subscriber);
 
@@ -73,7 +73,7 @@ namespace EbayKleinanzeigenCrawler.Manager
                 // As it is possible that multiple subscribers have the same subscription, this subscription could be an equal one from another subscriber
                 Subscription exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription) && s.Enabled);
 
-                string message = $"New result: {newResult.Link} \n" +                       // TODO: display price
+                string message = $"New result: {newResult.Link} \n" +
                                  $"{exactSubscription.Title} - {newResult.CreationDate} - {newResult.Price}";   // TODO: Amend Title of already sent notification to avoid duplicate notifications for two subscriptions
                 SendMessage(subscriber, message);
             }
@@ -102,11 +102,6 @@ namespace EbayKleinanzeigenCrawler.Manager
                         StartAddingSubscription(subscriber);
                         return;
                     }
-                case InputState.Idle when messageText == "/delete":  // TODO: add edit mode
-                    {
-                        DeleteAllSubscriptions(subscriber);
-                        return;
-                    }
                 case InputState.Idle when messageText == "/list":
                     {
                         DisplaySubscriptionList(subscriber);
@@ -125,6 +120,21 @@ namespace EbayKleinanzeigenCrawler.Manager
                 case not InputState.Idle when messageText == "/cancel":
                     {
                         CancelOperation(subscriber);
+                        return;
+                    }
+                case InputState.Idle when messageText == "/deleteall":
+                    {
+                        DeleteAllSubscriptions(subscriber);
+                        return;
+                    }
+                case InputState.Idle when messageText == "/delete":  // TODO: add edit mode
+                    {
+                        StartDeletingSubscription(subscriber);
+                        return;
+                    }
+                case InputState.WaitingForSubscriptionToDelete:
+                    {
+                        DeleteSubscription(subscriber, messageText);
                         return;
                     }
                 case InputState.WaitingForUrl:
@@ -174,10 +184,33 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "All your subscriptions were deleted");
         }
 
+        private void StartDeletingSubscription(Subscriber<TId> subscriber)
+        {
+            SendMessage(subscriber, "Enter the title of the subscription to delete.\n" +
+                                    "Enter /list to view your current subscriptions or /cancel to cancel");
+            subscriber.State = InputState.WaitingForSubscriptionToDelete;
+        }
+
+        private void DeleteSubscription(Subscriber<TId> subscriber, string messageText)
+        {
+            var subscriptionToDelete = subscriber.Subscriptions.FirstOrDefault(s => s.Title == messageText);
+
+            if (subscriptionToDelete is null)
+            {
+                SendMessage(subscriber, "No subscription with that title was found. Please try again.");
+                return;
+            }
+
+            subscriber.Subscriptions.Remove(subscriptionToDelete);
+            SaveData();
+            SendMessage(subscriber, $"Deleted subscription {subscriptionToDelete.Title}");
+            subscriber.State = InputState.Idle;
+        }
+
         private void DisplayHelp(Subscriber<TId> subscriber)
         {
             const string message = "Write /add to start the process of defining a subscription. \n" +
-                                   "Write /delete to delete all your subscriptions. \n" +
+                                   "Write /deleteall to delete all your subscriptions. \n" +
                                    "Write /list to view your current subscriptions \n" +
                                    "While you add a new subscription, you can write /cancel";
             SendMessage(subscriber, message);
@@ -192,7 +225,7 @@ namespace EbayKleinanzeigenCrawler.Manager
         private void StartAddingSubscription(Subscriber<TId> subscriber)
         {
             SendMessage(subscriber, "Paste the URL of a Ebay Kleinanzeigen search page. Use most exact search filters and avoid too many results.");
-            SendMessage(subscriber, "Currently, no URLs of mobile devices are supported. The URL must begin with 'https://www.ebay-kleinanzeigen.de/....'"); // TODO: Verify URL instead
+            SendMessage(subscriber, "Currently, no URLs of mobile devices are supported. The URL must begin with 'https://www.ebay-kleinanzeigen.de/....'", enablePreview: false); // TODO: Verify URL instead
             subscriber.State = InputState.WaitingForUrl;
         }
 
