@@ -119,6 +119,12 @@ namespace EbayKleinanzeigenCrawler.Parser
                 throw new InvalidOperationException("ExcludeKeywords cannot be null");
             }
 
+            if (document.DocumentNode.InnerHtml.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+            {
+                _logger.Warning("Tried to parse ad which does not exist anymore");
+                return false;
+            }
+
             string title = ParseTitle(document);
             string descriptionText = ParseDescriptionText(document);
 
