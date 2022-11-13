@@ -13,9 +13,10 @@
 
 # Before use:
 * Create your own Telegram Bot
-* Set the environment variable `TELEGRAM_BOT_TOKEN` to your token. 
+* Modify the `.env` file and set the environment variable `TELEGRAM_BOT_TOKEN` to your token. 
 
 # How to use:
+* Start the container with `docker-compose up`
 * Send /help to the Telegram bot for instructions
 * Currently only works with Desktop-Browser links, not mobile browser links. (https://www.ebay-kleinanzeigen.de/....)
 * Ebay Kleinanzeigen obfuscates its HTML with JavaScript, when more than 40 queries are made within the last 5 minutes. This software considers this limit.
