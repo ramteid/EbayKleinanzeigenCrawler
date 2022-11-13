@@ -1,20 +1,21 @@
-﻿using Autofac;
-using EbayKleinanzeigenCrawler.Interfaces;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
+using System;
 
 namespace EbayKleinanzeigenCrawler.Jobs
 {
     public class JobFactory : IJobFactory
     {
-        private readonly ILifetimeScope _scope;
+        private readonly IServiceProvider _serviceProvider;
 
-        public JobFactory(ILifetimeScope scope)
+        public JobFactory(IServiceProvider serviceProvider)
         {
-            _scope = scope;
+            _serviceProvider = serviceProvider;
         }
 
         public CrawlJob CreateInstance()
         {
-            return _scope.Resolve<CrawlJob>();
+            return _serviceProvider.GetService<CrawlJob>();
         }
     }
 }

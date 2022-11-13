@@ -1,5 +1,4 @@
-﻿using EbayKleinanzeigenCrawler.Infrastructure;
-using EbayKleinanzeigenCrawler.Interfaces;
+﻿using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
 using Serilog;
 using System;
@@ -40,7 +39,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             });
         }
 
-        protected override void SendMessage(Subscriber<int> subscriber, string message)
+        protected override void SendMessage(Subscriber<int> subscriber, string message, bool enablePreview = false)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Out.WriteLine($"Message for subscriber {subscriber.Id}:");

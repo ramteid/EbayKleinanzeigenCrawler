@@ -3,22 +3,27 @@ using EbayKleinanzeigenCrawler.Models;
 using Serilog;
 using System;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using Telegram.Bot;
-using Telegram.Bot.Args;
+using Telegram.Bot.Exceptions;
+using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
 namespace EbayKleinanzeigenCrawler.Manager
 {
-    public class TelegramManager : StatefulManagerBase<long>, IDisposable
+    public class TelegramManager : StatefulManagerBase<long>
     {
         private readonly string _telegramBotToken;
 
         private readonly ITelegramBotClient _botClient;
+        private readonly ILogger _logger;
 
         public TelegramManager(IDataStorage dataStorage, ILogger logger) : base(dataStorage, logger)
         {
-            this._telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
+            _logger = logger;
+            _telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
 
             if (string.IsNullOrWhiteSpace(_telegramBotToken))
             {
@@ -26,28 +31,52 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
 
             _botClient = new TelegramBotClient(_telegramBotToken);
-            _botClient.OnMessage += (_, e) => Bot_OnMessage(e);
-            _botClient.StartReceiving();
-        }
+            using var cts = new CancellationTokenSource();
 
-        private void Bot_OnMessage(MessageEventArgs e)
-        {
-            if (e.Message.Text is null)
+            // StartReceiving does not block the caller thread. Receiving is done on the ThreadPool.
+            var receiverOptions = new ReceiverOptions
             {
-                return;
-            }
-
-            long clientId = e.Message.Chat.Id;
-            string message = e.Message.Text;
-            ProcessCommand(clientId, message);
+                AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
+            };
+            _botClient.StartReceiving(
+                updateHandler: HandleUpdateAsync,
+                pollingErrorHandler: HandlePollingErrorAsync,
+                receiverOptions: receiverOptions,
+                cancellationToken: cts.Token
+            );
         }
 
-        protected override void SendMessage(Subscriber<long> subscriber, string message)
+        async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
-            SendMessage(subscriber, message, enablePreview: true, parseMode: ParseMode.Default);
+            // Only process Message updates: https://core.telegram.org/bots/api#message
+            if (update.Message is not { } message)
+                return;
+            // Only process text messages
+            if (message.Text is not { } messageText)
+                return;
+
+            var clientId = message.Chat.Id;
+
+            ProcessCommand(clientId, messageText);
         }
 
-        private void SendMessage(Subscriber<long> subscriber, string message, bool enablePreview, ParseMode parseMode)
+        Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
+        {
+            var ErrorMessage = exception switch
+            {
+                ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}", _ => exception.ToString()
+            };
+
+            _logger.Error(ErrorMessage);
+            return Task.CompletedTask;
+        }
+
+        protected override void SendMessage(Subscriber<long> subscriber, string message, bool enablePreview = true)
+        {
+            SendMessageTelegram(subscriber, message, enablePreview, ParseMode.Html);
+        }
+
+        private void SendMessageTelegram(Subscriber<long> subscriber, string message, bool enablePreview, ParseMode parseMode)
         {
             Message result = _botClient.SendTextMessageAsync(
                 chatId: subscriber.Id,
@@ -79,18 +108,13 @@ namespace EbayKleinanzeigenCrawler.Manager
                            $"*Enabled*: {subscription.Enabled}";
             }
 
-            SendMessage(subscriber, message, enablePreview: false, parseMode: ParseMode.MarkdownV2);
+            SendMessageTelegram(subscriber, message, enablePreview: false, parseMode: ParseMode.MarkdownV2);
         }
 
         private string EscapeMarkdownV2Characters(string text)
         {
             const string markdownEscapeCharacters = @"([_\*\[\]\(\)~`>#\+\-=\|\{\}\.!])";
             return Regex.Replace(text, markdownEscapeCharacters, @"\$1");
-        }
-
-        public void Dispose()
-        {
-            _botClient.StopReceiving();
         }
     }
 }

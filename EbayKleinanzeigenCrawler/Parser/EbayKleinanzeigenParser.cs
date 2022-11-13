@@ -74,7 +74,7 @@ namespace EbayKleinanzeigenCrawler.Parser
                     .SingleOrDefault();
 
                 string price = result
-                    .SelectNodes("div/div/p[@class='aditem-main--middle--price']")?
+                    .SelectNodes("div/div/div/p[@class='aditem-main--middle--price-shipping--price']")?
                     .Select(d => d.InnerText)
                     .SingleOrDefault()?
                     .Trim();
