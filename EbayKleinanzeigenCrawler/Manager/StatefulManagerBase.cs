@@ -231,8 +231,15 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         private void AnalyzeInputUrl(string messageText, Subscriber<TId> subscriber)
         {
-            bool validUrl = Uri.TryCreate(messageText, UriKind.Absolute, out Uri url);
-            if (!validUrl)  // TODO: Create proper URL validation in Parser class and call it from here
+            // TODO: Create proper URL validation in Parser class and call it from here
+            if (!messageText.StartsWith("https://www.ebay-kleinanzeigen.de/"))
+            {
+                SendMessage(subscriber, "Please enter a valid URL only");
+                return;
+            }
+
+            bool isValidUrl = Uri.TryCreate(messageText, UriKind.Absolute, out Uri url);
+            if (!isValidUrl)
             {
                 throw new InvalidOperationException("This doesn't seem to be a valid URL. Please try again.");
             }
