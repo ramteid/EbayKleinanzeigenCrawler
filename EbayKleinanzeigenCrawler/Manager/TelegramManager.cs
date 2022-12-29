@@ -1,4 +1,4 @@
-﻿using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
 using Serilog;
 using System;
@@ -46,7 +46,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             );
         }
 
-        async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
         {
             // Only process Message updates: https://core.telegram.org/bots/api#message
             if (update.Message is not { } message)
@@ -60,7 +60,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             ProcessCommand(clientId, messageText);
         }
 
-        Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
+        private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
         {
             var ErrorMessage = exception switch
             {
