@@ -61,6 +61,8 @@ namespace EbayKleinanzeigenCrawler.Manager
 
         public void NotifySubscribers(Subscription subscription, Result newResult)
         {
+            // TODO: Bug: When there are two equal subscriptions with only one having initial results enabled, also the other subscription with initial=false will get the initial results
+
             List<Subscriber<TId>> subscribers = SubscriberList.Where(s => s.Subscriptions.Contains(subscription)).ToList();
 
             if (subscribers.Count == 0)
@@ -117,11 +119,6 @@ namespace EbayKleinanzeigenCrawler.Manager
                         ReloadSubscriberFile(subscriber); // TODO: restrict to admins only
                         return;
                     }
-                case not InputState.Idle when messageText == "/cancel":
-                    {
-                        CancelOperation(subscriber);
-                        return;
-                    }
                 case InputState.Idle when messageText == "/deleteall":
                     {
                         DeleteAllSubscriptions(subscriber);
@@ -130,6 +127,21 @@ namespace EbayKleinanzeigenCrawler.Manager
                 case InputState.Idle when messageText == "/delete":  // TODO: add edit mode
                     {
                         StartDeletingSubscription(subscriber);
+                        return;
+                    }
+                case InputState.Idle when messageText == "/enable" || messageText == "/disable":
+                    {
+                        EnableOrDisableSubscription(subscriber, messageText);
+                        return;
+                    }
+                case not InputState.Idle when messageText == "/cancel":
+                    {
+                        CancelOperation(subscriber);
+                        return;
+                    }
+                case InputState.WaitingForTitleToDisable or InputState.WaitingForTitleToEnable:
+                    {
+                        EnableOrDisableSubscriptionTitle(subscriber, messageText);
                         return;
                     }
                 case InputState.WaitingForSubscriptionToDelete:
@@ -176,7 +188,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Welcome :-) Write /help for available commands");
             subscriber.State = InputState.Idle;
         }
-
+        
         private void DeleteAllSubscriptions(Subscriber<TId> subscriber)
         {
             subscriber.Subscriptions.Clear();
@@ -197,7 +209,7 @@ namespace EbayKleinanzeigenCrawler.Manager
 
             if (subscriptionToDelete is null)
             {
-                SendMessage(subscriber, "No subscription with that title was found. Please try again.");
+                SendMessage(subscriber, "No subscription with that title was found. Please try again or /cancel.");
                 return;
             }
 
@@ -207,11 +219,57 @@ namespace EbayKleinanzeigenCrawler.Manager
             subscriber.State = InputState.Idle;
         }
 
+        private void EnableOrDisableSubscription(Subscriber<TId> subscriber, string messageText)
+        {
+            if (messageText == "/disable")
+            {
+                subscriber.State = InputState.WaitingForTitleToDisable;
+            }
+            else if (messageText == "/enable")
+            {
+                subscriber.State = InputState.WaitingForTitleToEnable;
+            }
+            else
+            {
+                SendMessage(subscriber, "Unknown command");
+                return;
+            }
+
+            SendMessage(subscriber, "Enter title of the subscription");
+        }
+
+        private void EnableOrDisableSubscriptionTitle(Subscriber<TId> subscriber, string messageText)
+        {
+            var subscription = subscriber.Subscriptions.FirstOrDefault(s => s.Title == messageText);
+
+            if (subscription is null)
+            {
+                SendMessage(subscriber, "No subscription with that title was found. Please try again or /cancel.");
+                return;
+            }
+
+            if (subscriber.State == InputState.WaitingForTitleToDisable)
+            {
+                subscription.Enabled = false;
+                SendMessage(subscriber, $"Disabled subscription {subscription.Title}");
+            }
+            else if (subscriber.State == InputState.WaitingForTitleToEnable)
+            {
+                subscription.Enabled = true;
+                SendMessage(subscriber, $"Enabled subscription {subscription.Title}");
+            }
+
+            SaveData();
+            subscriber.State = InputState.Idle;
+        }
+
         private void DisplayHelp(Subscriber<TId> subscriber)
         {
             const string message = "Write /add to start the process of defining a subscription. \n" +
+                                   "Write /delete to delete a subscription. \n" +
                                    "Write /deleteall to delete all your subscriptions. \n" +
                                    "Write /list to view your current subscriptions \n" +
+                                   "Write /disable or /disable enable to disable or enable a subscription \n" +
                                    "While you add a new subscription, you can write /cancel";
             SendMessage(subscriber, message);
         }
