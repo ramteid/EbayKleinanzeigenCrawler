@@ -385,6 +385,7 @@ namespace EbayKleinanzeigenCrawler.Manager
         {
             subscriber.State = InputState.Idle;
             subscriber.IncompleteSubscription = null;
+            SaveData();
             SendMessage(subscriber, "Cancelled the operation");
         }
 
