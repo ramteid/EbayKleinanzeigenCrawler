@@ -8,6 +8,8 @@
         WaitingForExcludeKeywords,
         WaitingForInitialPull,
         WaitingForTitle,
-        WaitingForSubscriptionToDelete
+        WaitingForSubscriptionToDelete,
+        WaitingForTitleToDisable,
+        WaitingForTitleToEnable
     }
 }
