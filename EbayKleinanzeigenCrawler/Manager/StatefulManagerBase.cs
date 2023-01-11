@@ -269,8 +269,8 @@ namespace EbayKleinanzeigenCrawler.Manager
                                    "Write /delete to delete a subscription. \n" +
                                    "Write /deleteall to delete all your subscriptions. \n" +
                                    "Write /list to view your current subscriptions \n" +
-                                   "Write /disable or /disable enable to disable or enable a subscription \n" +
-                                   "While you add a new subscription, you can write /cancel";
+                                   "Write /disable or /enable to disable or enable a subscription \n" +
+                                   "At any time, you can write /cancel";
             SendMessage(subscriber, message);
         }
 
