@@ -214,9 +214,9 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
 
             subscriber.Subscriptions.Remove(subscriptionToDelete);
+            subscriber.State = InputState.Idle;
             SaveData();
             SendMessage(subscriber, $"Deleted subscription {subscriptionToDelete.Title}");
-            subscriber.State = InputState.Idle;
         }
 
         private void EnableOrDisableSubscription(Subscriber<TId> subscriber, string messageText)
@@ -248,19 +248,21 @@ namespace EbayKleinanzeigenCrawler.Manager
                 return;
             }
 
+            string resultMessage = "";
             if (subscriber.State == InputState.WaitingForTitleToDisable)
             {
                 subscription.Enabled = false;
-                SendMessage(subscriber, $"Disabled subscription {subscription.Title}");
+                resultMessage = $"Disabled subscription {subscription.Title}";
             }
             else if (subscriber.State == InputState.WaitingForTitleToEnable)
             {
                 subscription.Enabled = true;
-                SendMessage(subscriber, $"Enabled subscription {subscription.Title}");
+                resultMessage = $"Enabled subscription {subscription.Title}";
             }
 
-            SaveData();
             subscriber.State = InputState.Idle;
+            SaveData();
+            SendMessage(subscriber, resultMessage);
         }
 
         private void DisplayHelp(Subscriber<TId> subscriber)
