@@ -2,11 +2,11 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
-using EbayKleinanzeigenCrawler.Models;
+using KleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
 using Serilog;
 
-namespace EbayKleinanzeigenCrawler.Query
+namespace KleinanzeigenCrawler.Query
 {
     public class QueryExecutor
     {

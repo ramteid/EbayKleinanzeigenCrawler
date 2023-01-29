@@ -1,4 +1,4 @@
-﻿namespace EbayKleinanzeigenCrawler.Interfaces
+﻿namespace KleinanzeigenCrawler.Interfaces
 {
     public interface IDataStorage
     {

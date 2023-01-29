@@ -1,24 +1,24 @@
-﻿using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
+﻿using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Models;
 using Serilog;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace EbayKleinanzeigenCrawler.Manager
+namespace KleinanzeigenCrawler.Manager
 {
     /// <summary>
     /// This class allows using the program in a console.
     /// Change binding in <see cref="AutofacConfig"/> from TelegramManager to ConsoleManager.
     /// </summary>
-    public class ConsoleManager : StatefulManagerBase<int>
+    public class ConsoleManager : StatefulManagerBase
     {
         /// <summary>
         /// Define an arbitrary Id
         /// </summary>
-        private const int ConsoleSubscriberId = 12345;
+        private readonly string ConsoleSubscriberId = Guid.NewGuid().ToString();
 
-        public ConsoleManager(IDataStorage dataStorage, ILogger logger) : base(dataStorage, logger)
+        public ConsoleManager(ILogger logger, ISubscriptionPersistence subscriptionManager) : base(logger, subscriptionManager)
         {
             InputLoop();
         }
@@ -39,7 +39,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             });
         }
 
-        protected override void SendMessage(Subscriber<int> subscriber, string message, bool enablePreview = false)
+        protected override void SendMessage(Subscriber subscriber, string message, bool enablePreview = false)
         {
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Out.WriteLine($"Message for subscriber {subscriber.Id}:");
@@ -48,7 +48,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             Console.ResetColor();
         }
 
-        protected override void DisplaySubscriptionList(Subscriber<int> subscriber)
+        protected override void DisplaySubscriptionList(Subscriber subscriber)
         {
             var message = "Your subscriptions:";
             foreach (Subscription subscription in subscriber.Subscriptions)

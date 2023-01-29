@@ -1,47 +1,40 @@
-﻿using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
+﻿using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Models;
 using Serilog;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
-namespace EbayKleinanzeigenCrawler.Manager
+namespace KleinanzeigenCrawler.Manager
 {
-    public abstract class StatefulManagerBase<TId> : IOutgoingNotifications, ISubscriptionManager
+    public abstract class StatefulManagerBase : IOutgoingNotifications
     {
-        protected readonly IDataStorage DataStorage;
         protected readonly ILogger Logger;
-        protected ConcurrentBag<Subscriber<TId>> SubscriberList { get; set; }
+        private readonly ISubscriptionPersistence _subscriptionPersistence;
 
-        protected StatefulManagerBase(IDataStorage dataStorage, ILogger logger)
+        protected StatefulManagerBase(ILogger logger, ISubscriptionPersistence subscriptionManager)
         {
-            Directory.CreateDirectory("data");
-            
-            DataStorage = dataStorage;
             Logger = logger;
-            SubscriberList = new ConcurrentBag<Subscriber<TId>>();
-            RestoreData();
+            _subscriptionPersistence = subscriptionManager;
         }
 
-        protected abstract void SendMessage(Subscriber<TId> subscriber, string message, bool enablePreview = true);
+        protected abstract void SendMessage(Subscriber subscriber, string message, bool enablePreview = true);
 
-        protected abstract void DisplaySubscriptionList(Subscriber<TId> subscriber);
+        protected abstract void DisplaySubscriptionList(Subscriber subscriber);
 
-        protected void ProcessCommand(TId clientId, string message)
+        protected void ProcessCommand(string clientId, string message)
         {
             Logger.Information($"Sender: {clientId}, Message: \"{message}\"");
 
-            Subscriber<TId> subscriber = null;
+            Subscriber subscriber = null;
             try
             {
-                subscriber = SubscriberList.SingleOrDefault(s => s.Id.Equals(clientId));
+                var subscribers = _subscriptionPersistence.GetSubscribers();
+                subscriber = subscribers.SingleOrDefault(s => s.Id.Equals(clientId));
                 if (subscriber is null)
                 {
-                    subscriber = new Subscriber<TId> { Id = clientId };
-                    SubscriberList.Add(subscriber);
-                    SaveData();
+                    subscriber = new Subscriber { Id = clientId };
+                    _subscriptionPersistence.AddSubscriber(subscriber);
                 }
 
                 HandleState(subscriber, message);
@@ -63,14 +56,15 @@ namespace EbayKleinanzeigenCrawler.Manager
         {
             // TODO: Bug: When there are two equal subscriptions with only one having initial results enabled, also the other subscription with initial=false will get the initial results
 
-            List<Subscriber<TId>> subscribers = SubscriberList.Where(s => s.Subscriptions.Contains(subscription)).ToList();
+            List<Subscriber> subscribers = _subscriptionPersistence.GetSubscribers()
+                .Where(s => s.Subscriptions.Contains(subscription)).ToList();
 
             if (subscribers.Count == 0)
             {
                 Logger.Error($"Attempted to notify subscribers but found none for subscription {subscription.Id}");
             }
 
-            foreach (Subscriber<TId> subscriber in subscribers)
+            foreach (Subscriber subscriber in subscribers)
             {
                 // As it is possible that multiple subscribers have the same subscription, this subscription could be an equal one from another subscriber
                 Subscription exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription) && s.Enabled);
@@ -81,16 +75,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
         }
 
-        public List<Subscription> GetDistinctEnabledSubscriptions()
-        {
-            return SubscriberList
-                .SelectMany(s => s.Subscriptions)
-                .Where(s => s.Enabled)
-                .Distinct()
-                .ToList();
-        }
-
-        private void HandleState(Subscriber<TId> subscriber, string messageText)
+        private void HandleState(Subscriber subscriber, string messageText)
         {
             switch (subscriber.State)
             {
@@ -183,27 +168,27 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
         }
 
-        private void DisplayHelloMessage(Subscriber<TId> subscriber)
+        private void DisplayHelloMessage(Subscriber subscriber)
         {
             SendMessage(subscriber, "Welcome :-) Write /help for available commands");
             subscriber.State = InputState.Idle;
         }
         
-        private void DeleteAllSubscriptions(Subscriber<TId> subscriber)
+        private void DeleteAllSubscriptions(Subscriber subscriber)
         {
             subscriber.Subscriptions.Clear();
-            SaveData();
+            _subscriptionPersistence.SaveData();
             SendMessage(subscriber, "All your subscriptions were deleted");
         }
 
-        private void StartDeletingSubscription(Subscriber<TId> subscriber)
+        private void StartDeletingSubscription(Subscriber subscriber)
         {
             SendMessage(subscriber, "Enter the title of the subscription to delete.\n" +
                                     "Enter /list to view your current subscriptions or /cancel to cancel");
             subscriber.State = InputState.WaitingForSubscriptionToDelete;
         }
 
-        private void DeleteSubscription(Subscriber<TId> subscriber, string messageText)
+        private void DeleteSubscription(Subscriber subscriber, string messageText)
         {
             var subscriptionToDelete = subscriber.Subscriptions.FirstOrDefault(s => s.Title == messageText);
 
@@ -215,11 +200,11 @@ namespace EbayKleinanzeigenCrawler.Manager
 
             subscriber.Subscriptions.Remove(subscriptionToDelete);
             subscriber.State = InputState.Idle;
-            SaveData();
+            _subscriptionPersistence.SaveData();
             SendMessage(subscriber, $"Deleted subscription {subscriptionToDelete.Title}");
         }
 
-        private void EnableOrDisableSubscription(Subscriber<TId> subscriber, string messageText)
+        private void EnableOrDisableSubscription(Subscriber subscriber, string messageText)
         {
             if (messageText == "/disable")
             {
@@ -238,7 +223,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Enter title of the subscription");
         }
 
-        private void EnableOrDisableSubscriptionTitle(Subscriber<TId> subscriber, string messageText)
+        private void EnableOrDisableSubscriptionTitle(Subscriber subscriber, string messageText)
         {
             var subscription = subscriber.Subscriptions.FirstOrDefault(s => s.Title == messageText);
 
@@ -261,11 +246,11 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
 
             subscriber.State = InputState.Idle;
-            SaveData();
+            _subscriptionPersistence.SaveData();
             SendMessage(subscriber, resultMessage);
         }
 
-        private void DisplayHelp(Subscriber<TId> subscriber)
+        private void DisplayHelp(Subscriber subscriber)
         {
             const string message = "Write /add to start the process of defining a subscription. \n" +
                                    "Write /delete to delete a subscription. \n" +
@@ -276,20 +261,20 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, message);
         }
 
-        private void ReloadSubscriberFile(Subscriber<TId> subscriber)
+        private void ReloadSubscriberFile(Subscriber subscriber)
         {
-            bool restored = RestoreData();
+            bool restored = _subscriptionPersistence.RestoreData();
             SendMessage(subscriber, restored ? "Subscriber list restored" : "Failed to restore subscriber list");
         }
 
-        private void StartAddingSubscription(Subscriber<TId> subscriber)
+        private void StartAddingSubscription(Subscriber subscriber)
         {
             SendMessage(subscriber, "Paste the URL of a Ebay Kleinanzeigen search page. Use most exact search filters and avoid too many results.");
             SendMessage(subscriber, "Currently, no URLs of mobile devices are supported. The URL must begin with 'https://www.ebay-kleinanzeigen.de/....'", enablePreview: false); // TODO: Verify URL instead
             subscriber.State = InputState.WaitingForUrl;
         }
 
-        private void AnalyzeInputUrl(string messageText, Subscriber<TId> subscriber)
+        private void AnalyzeInputUrl(string messageText, Subscriber subscriber)
         {
             // TODO: Create proper URL validation in Parser class and call it from here
             if (!messageText.StartsWith("https://www.ebay-kleinanzeigen.de/"))
@@ -310,7 +295,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Example: 'one, two|three' will find results where 'one' and 'two' are words in the description; but it will also find results with 'one' and 'three'.");
         }
 
-        private void AnalyzeInputIncludeKeywords(string messageText, Subscriber<TId> subscriber)
+        private void AnalyzeInputIncludeKeywords(string messageText, Subscriber subscriber)
         {
             List<string> includeKeywords = messageText
                 .Split(",")
@@ -326,7 +311,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Hint: If only one of these keywords is found in title or description, there will be no notification.");
         }
 
-        private void AnalyzeInputExcludeKeywords(string messageText, Subscriber<TId> subscriber)
+        private void AnalyzeInputExcludeKeywords(string messageText, Subscriber subscriber)
         {
             List<string> excludeKeywords = messageText
                 .Split(",")
@@ -341,7 +326,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Do you want to receive all existing matches initially? (yes/no)");
         }
 
-        private void AnalyzeInputInitialPull(string messageText, Subscriber<TId> subscriber)
+        private void AnalyzeInputInitialPull(string messageText, Subscriber subscriber)
         {
             bool initialPull;
             if (string.Equals(messageText.Trim(), "yes", StringComparison.InvariantCultureIgnoreCase))
@@ -364,66 +349,34 @@ namespace EbayKleinanzeigenCrawler.Manager
             SendMessage(subscriber, "Choose a unique title for your subscription.");
         }
 
-        private void AnalyzeInputTitle(string messageText, Subscriber<TId> subscriber)
+        private void AnalyzeInputTitle(string messageText, Subscriber subscriber)
         {
             subscriber.IncompleteSubscription.Title = messageText.Trim();
         }
 
-        private void FinalizeSubscription(Subscriber<TId> subscriber)
+        private void FinalizeSubscription(Subscriber subscriber)
         {
             subscriber.IncompleteSubscription.Enabled = true;
             subscriber.Subscriptions.Add(subscriber.IncompleteSubscription);
             Logger.Information($"Added subscription {subscriber.IncompleteSubscription.Id}");
             subscriber.IncompleteSubscription = null;
             subscriber.State = InputState.Idle;
-            SaveData();
+            _subscriptionPersistence.SaveData();
             SendMessage(subscriber, $"That's it. Added a new subscription for you. You now have {subscriber.Subscriptions.Count} subscriptions.");
             SendMessage(subscriber, "Initially it can take a while until all matches are found. I can only do 40 queries every 5 minutes :-)");
         }
 
-        private void CancelOperation(Subscriber<TId> subscriber)
+        private void CancelOperation(Subscriber subscriber)
         {
             subscriber.State = InputState.Idle;
             subscriber.IncompleteSubscription = null;
-            SaveData();
+            _subscriptionPersistence.SaveData();
             SendMessage(subscriber, "Cancelled the operation");
         }
 
-        private void DisplayDontUnderstand(Subscriber<TId> subscriber)
+        private void DisplayDontUnderstand(Subscriber subscriber)
         {
             SendMessage(subscriber, "I don't understand. Write /help for instructions.");
-        }
-
-        private bool RestoreData()
-        {
-            try
-            {
-                DataStorage.Load(Path.Join("data", "Subscribers.json"), out ConcurrentBag<Subscriber<TId>> data);
-                SubscriberList = data;
-                Logger.Information($"Restored data: {data.Count} Subscribers");
-            }
-            catch (Exception e)
-            {
-                SubscriberList ??= new ConcurrentBag<Subscriber<TId>>();
-
-                if (e is FileNotFoundException)
-                {
-                    Logger.Warning($"Could not restore subscribers: {e.Message}");
-                }
-                else
-                {
-                    Logger.Error(e, $"Error when restoring subscribers: {e.Message}");
-                }
-
-                return false;
-            }
-
-            return true;
-        }
-
-        private void SaveData()
-        {
-            DataStorage.Save(SubscriberList, Path.Join("data", "Subscribers.json"));
         }
     }
 }

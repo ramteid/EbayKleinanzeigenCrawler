@@ -1,16 +1,19 @@
 ﻿using System;
 using System.IO;
-using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Jobs;
-using EbayKleinanzeigenCrawler.Manager;
-using EbayKleinanzeigenCrawler.Parser;
-using EbayKleinanzeigenCrawler.Query;
-using EbayKleinanzeigenCrawler.Scheduler;
 using EbayKleinanzeigenCrawler.Storage;
+using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Manager;
+using KleinanzeigenCrawler.Parser;
+using KleinanzeigenCrawler.Query;
+using KleinanzeigenCrawler.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using EbayKleinanzeigenCrawler.Subscriptions;
+using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Persistence;
+using EbayKleinanzeigenCrawler.Parser;
 
-namespace EbayKleinanzeigenCrawler
+namespace KleinanzeigenCrawler
 {
     public class Program
     {
@@ -19,11 +22,11 @@ namespace EbayKleinanzeigenCrawler
             var serviceCollection = ConfigureServices();
 
             var logger = serviceCollection.GetService<ILogger>();
-            var scheduler = serviceCollection.GetService<JobScheduler>();
+            var handler = serviceCollection.GetService<SubscriptionHandler>();
 
             try
             {
-                scheduler.Run();
+                handler.Run();
             }
             catch (Exception e)
             {
@@ -36,14 +39,14 @@ namespace EbayKleinanzeigenCrawler
             var serviceCollection = new ServiceCollection();
 
             serviceCollection.AddSingleton<TelegramManager>();
+            serviceCollection.AddSingleton<EbayKleinanzeigenParser>();
             serviceCollection.AddSingleton<IOutgoingNotifications>(s => s.GetService<TelegramManager>());
-            serviceCollection.AddSingleton<ISubscriptionManager>(s => s.GetService<TelegramManager>());
-            serviceCollection.AddSingleton<IParserProvider, ParserProvider>();
+            serviceCollection.AddSingleton<ISubscriptionPersistence, SubscriptionPersistence>();
+            serviceCollection.AddSingleton<IAlreadyProcessedUrlsPersistence, AlreadyProcessedUrlsPersistence>();
             serviceCollection.AddSingleton<QueryCounter>();
             serviceCollection.AddSingleton<QueryExecutor>();
-            serviceCollection.AddTransient<JobScheduler>();
-            serviceCollection.AddTransient<CrawlJob>();
-            serviceCollection.AddTransient<IJobFactory, JobFactory>();
+            serviceCollection.AddTransient<SubscriptionHandler>();
+            serviceCollection.AddTransient<IParserProvider, ParserProvider>();
             serviceCollection.AddTransient<IDataStorage, JsonStorage>();
             serviceCollection.AddTransient<IParser, EbayKleinanzeigenParser>();
 

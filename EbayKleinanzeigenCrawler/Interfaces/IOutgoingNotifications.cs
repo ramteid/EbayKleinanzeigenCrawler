@@ -1,6 +1,6 @@
-﻿using EbayKleinanzeigenCrawler.Models;
+﻿using KleinanzeigenCrawler.Models;
 
-namespace EbayKleinanzeigenCrawler.Interfaces
+namespace KleinanzeigenCrawler.Interfaces
 {
     public interface IOutgoingNotifications
     {

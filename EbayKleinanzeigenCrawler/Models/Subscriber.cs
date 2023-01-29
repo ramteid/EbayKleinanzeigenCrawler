@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
 
-namespace EbayKleinanzeigenCrawler.Models
+namespace KleinanzeigenCrawler.Models
 {
-    public class Subscriber<TId>
+    public class Subscriber
     {
-        public TId Id { get; set; }
+        public string Id { get; set; }
         public InputState State { get; set; }
         public Subscription IncompleteSubscription { get; set; }
 

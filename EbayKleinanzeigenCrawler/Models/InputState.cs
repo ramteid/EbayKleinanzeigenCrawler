@@ -1,4 +1,4 @@
-﻿namespace EbayKleinanzeigenCrawler.Models
+﻿namespace KleinanzeigenCrawler.Models
 {
     public enum InputState
     {
