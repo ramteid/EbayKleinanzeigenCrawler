@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using EbayKleinanzeigenCrawler.Models;
+using KleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
 
-namespace EbayKleinanzeigenCrawler.Interfaces
+namespace KleinanzeigenCrawler.Interfaces
 {
     public interface IParser
     {

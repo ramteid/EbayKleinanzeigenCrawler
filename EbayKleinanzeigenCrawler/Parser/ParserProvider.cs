@@ -1,23 +1,31 @@
-﻿using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
+﻿using System;
+using EbayKleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Models;
+using KleinanzeigenCrawler.Parser;
 using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using System;
 
 namespace EbayKleinanzeigenCrawler.Parser
 {
     public class ParserProvider : IParserProvider
     {
-        private readonly IServiceProvider _serviceProvider;
+        private IServiceProvider _serviceProvider;
 
         public ParserProvider(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
         }
 
-        public IParser GetInstance(Subscription subscription)
+        public IParser GetParser(Subscription subscription)
         {
-            return new EbayKleinanzeigenParser(_serviceProvider.GetService<ILogger>(), subscription);
+            if (subscription.QueryUrl.ToString().Contains("ebay-kleinanzeigen"))
+            {
+                return _serviceProvider.GetService<EbayKleinanzeigenParser>();
+            }
+            else
+            {
+                throw new NotSupportedException($"No parser exists for '{subscription.QueryUrl}'");
+            }
         }
     }
 }

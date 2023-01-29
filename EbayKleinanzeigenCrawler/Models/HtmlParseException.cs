@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace EbayKleinanzeigenCrawler.Models
+namespace KleinanzeigenCrawler.Models
 {
     class HtmlParseException : Exception
     {

@@ -2,7 +2,7 @@
 using System.Collections.Concurrent;
 using Serilog;
 
-namespace EbayKleinanzeigenCrawler.Query
+namespace KleinanzeigenCrawler.Query
 {
     public class QueryCounter
     {

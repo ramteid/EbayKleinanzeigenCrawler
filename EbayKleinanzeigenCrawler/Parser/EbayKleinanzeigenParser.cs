@@ -1,24 +1,22 @@
-﻿using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
+﻿using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace EbayKleinanzeigenCrawler.Parser
+namespace KleinanzeigenCrawler.Parser
 {
     public class EbayKleinanzeigenParser : IParser
     {
         private readonly ILogger _logger;
-        private Subscription Subscription { get; }
 
         private const string InvalidHtml = "<html><head><meta charset=\"utf-8\"><script>"; // When the source code is obfuscated with JS
 
-        public EbayKleinanzeigenParser(ILogger logger, Subscription subscription)
+        public EbayKleinanzeigenParser(ILogger logger)
         {
             _logger = logger;
-            Subscription = subscription;
         }
 
         public List<Uri> GetAdditionalPages(HtmlDocument document)
@@ -109,12 +107,12 @@ namespace EbayKleinanzeigenCrawler.Parser
 
         public bool IsMatch(HtmlDocument document, Subscription subscription)
         {
-            if (Subscription.IncludeKeywords is null)
+            if (subscription.IncludeKeywords is null)
             {
                 throw new InvalidOperationException("IncludeKeywords cannot be null");
             }
 
-            if (Subscription.ExcludeKeywords is null)
+            if (subscription.ExcludeKeywords is null)
             {
                 throw new InvalidOperationException("ExcludeKeywords cannot be null");
             }
@@ -133,8 +131,8 @@ namespace EbayKleinanzeigenCrawler.Parser
                 throw new NullReferenceException("Could not parse title or description text");
             }
 
-            bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(title + descriptionText);
-            bool excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(title + descriptionText);
+            bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
+            bool excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(subscription, title + descriptionText);
             return allIncludeKeywordsFound && !excludeKeywordsFound;
         }
 
@@ -154,15 +152,15 @@ namespace EbayKleinanzeigenCrawler.Parser
                 .InnerHtml;
         }
 
-        private bool HtmlContainsAllIncludeKeywords(string descriptionText)
+        private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
         {
-            if (Subscription.IncludeKeywords.Count == 0)
+            if (subscription.IncludeKeywords.Count == 0)
             {
                 return true;
             }
 
             // For a keyword "foo | bar", only one of the disjunct keywords must be included
-            List<List<string>> disjunctionGroups = Subscription.IncludeKeywords
+            List<List<string>> disjunctionGroups = subscription.IncludeKeywords
                 .Where(str => str.Contains("|"))
                 .Select(str => str
                     .Split("|")
@@ -180,21 +178,21 @@ namespace EbayKleinanzeigenCrawler.Parser
                 }
             }
 
-            bool allNonDisjunctiveKeywordsFound = Subscription.IncludeKeywords
+            bool allNonDisjunctiveKeywordsFound = subscription.IncludeKeywords
                 .Where(k => !k.Contains("|"))
                 .All(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
 
             return allNonDisjunctiveKeywordsFound;
         }
 
-        private bool HtmlContainsAnyExcludeKeywords(string descriptionText)
+        private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
         {
-            if (Subscription.ExcludeKeywords.Count == 0)
+            if (subscription.ExcludeKeywords.Count == 0)
             {
                 return false;
             }
 
-            return Subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
+            return subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
         }
     }
 }

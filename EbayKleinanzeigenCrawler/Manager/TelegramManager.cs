@@ -1,5 +1,5 @@
-using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
+﻿using KleinanzeigenCrawler.Interfaces;
+using KleinanzeigenCrawler.Models;
 using Serilog;
 using System;
 using System.Text.RegularExpressions;
@@ -11,16 +11,16 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace EbayKleinanzeigenCrawler.Manager
+namespace KleinanzeigenCrawler.Manager
 {
-    public class TelegramManager : StatefulManagerBase<long>
+    public class TelegramManager : StatefulManagerBase
     {
         private readonly string _telegramBotToken;
 
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger _logger;
 
-        public TelegramManager(IDataStorage dataStorage, ILogger logger) : base(dataStorage, logger)
+        public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager) : base(logger, subscriptionManager)
         {
             _logger = logger;
             _telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
@@ -55,7 +55,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             if (message.Text is not { } messageText)
                 return;
 
-            var clientId = message.Chat.Id;
+            var clientId = message.Chat.Id.ToString();
 
             ProcessCommand(clientId, messageText);
         }
@@ -71,12 +71,12 @@ namespace EbayKleinanzeigenCrawler.Manager
             return Task.CompletedTask;
         }
 
-        protected override void SendMessage(Subscriber<long> subscriber, string message, bool enablePreview = true)
+        protected override void SendMessage(Subscriber subscriber, string message, bool enablePreview = true)
         {
             SendMessageTelegram(subscriber, message, enablePreview, ParseMode.Html);
         }
 
-        private void SendMessageTelegram(Subscriber<long> subscriber, string message, bool enablePreview, ParseMode parseMode)
+        private void SendMessageTelegram(Subscriber subscriber, string message, bool enablePreview, ParseMode parseMode)
         {
             Message result = _botClient.SendTextMessageAsync(
                 chatId: subscriber.Id,
@@ -95,7 +95,7 @@ namespace EbayKleinanzeigenCrawler.Manager
             }
         }
 
-        protected override void DisplaySubscriptionList(Subscriber<long> subscriber)
+        protected override void DisplaySubscriptionList(Subscriber subscriber)
         {
             var message = "Your subscriptions:";
             foreach (Subscription subscription in subscriber.Subscriptions)

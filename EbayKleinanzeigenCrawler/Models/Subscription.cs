@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace EbayKleinanzeigenCrawler.Models
+namespace KleinanzeigenCrawler.Models
 {
     public class Subscription
     {

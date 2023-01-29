@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace EbayKleinanzeigenCrawler.Models
+namespace KleinanzeigenCrawler.Models
 {
     public class Result
     {
