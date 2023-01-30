@@ -54,13 +54,18 @@ namespace KleinanzeigenCrawler.Parser
 
             foreach (HtmlNode result in results)
             {
-                bool isProShopLink = result
-                    .Descendants("div")
-                    .Any(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"));
+                bool isProShopLink = 
+                    result
+                        .Descendants("div")
+                        .Any(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"))
+                    || result
+                        .Descendants("i")
+                        .Any(d => d.Attributes.Any(a => a.Value.Contains("icon-feature-topad")));
 
                 if (isProShopLink)
                 {
                     // Filter out Pro-Shop links
+                    _logger.Debug("Skipping Pro-Shop link");
                     continue;
                 }
 
@@ -101,7 +106,7 @@ namespace KleinanzeigenCrawler.Parser
                     _logger.Error("Could not parse price");
                 }
 
-                yield return new Result { Link = link, CreationDate = date ?? "?" , Price = price ?? "?"};
+                yield return new Result { Link = link, CreationDate = date ?? "?" , Price = price ?? "?" };
             }
         }
 
