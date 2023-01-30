@@ -99,7 +99,9 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 List<Result> linksFromAdditionalPage = parser.ParseLinks(documentNextPage).ToList();
                 _logger.Information($"Found {linksFromAdditionalPage.Count} links on page {i + 2}");
 
-                List<Result> newLinksFromAdditionalPage = linksFromAdditionalPage.Where(l => !alreadyProcessedLinks.Contains(l.Link)).ToList();
+                List<Result> newLinksFromAdditionalPage = linksFromAdditionalPage
+                    .Where(l => !alreadyProcessedLinks.Contains(l.Link))
+                    .ToList();
                 _logger.Information($"{newLinksFromAdditionalPage.Count} links of them are new");
 
                 // Arrange the oldest entries at the beginning
@@ -111,10 +113,14 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             List<Result> results = parser.ParseLinks(document).ToList();
             _logger.Information($"Found {results.Count} links on page 1");
 
-            List<Result> newResultsPage1 = results.Where(l => !alreadyProcessedLinks.Contains(l.Link)).ToList();
+            List<Result> newResultsPage1 = results
+                .Where(l => !alreadyProcessedLinks.Contains(l.Link))
+                .Reverse()
+                .ToList();
             _logger.Information($"{newResultsPage1.Count} links of them are new");
 
-            return newResults.Concat(newResultsPage1).ToList();
+            var x= newResults.Concat(newResultsPage1).ToList();
+            return x;
         }
 
         private void CheckForMatches(IParser parser, Subscription subscription, List<Uri> alreadyProcessedLinks, List<Result> newResults, bool firstRun)

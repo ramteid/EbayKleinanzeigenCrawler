@@ -18,13 +18,15 @@ namespace EbayKleinanzeigenCrawler.Parser
 
         public IParser GetParser(Subscription subscription)
         {
-            if (subscription.QueryUrl.ToString().Contains("ebay-kleinanzeigen"))
+            var subscriptionQueryUrl = subscription.QueryUrl.ToString();
+
+            if (subscriptionQueryUrl.Contains("ebay-kleinanzeigen"))
             {
                 return _serviceProvider.GetService<EbayKleinanzeigenParser>();
             }
             else
             {
-                throw new NotSupportedException($"No parser exists for '{subscription.QueryUrl}'");
+                throw new NotSupportedException($"No parser exists for '{subscriptionQueryUrl}'");
             }
         }
     }
