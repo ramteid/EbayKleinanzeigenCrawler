@@ -8,6 +8,7 @@ using HtmlAgilityPack;
 using Serilog;
 using EbayKleinanzeigenCrawler.Interfaces;
 using System.Threading;
+using Serilog.Events;
 
 namespace EbayKleinanzeigenCrawler.Subscriptions
 {
@@ -16,16 +17,19 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
         private readonly IOutgoingNotifications _outgoingNotifications;
         private readonly IParserProvider _parserProvider;
         private readonly QueryExecutor _queryExecutor;
+        private readonly QueryCounter _queryCounter;
         private readonly ILogger _logger;
         private readonly ISubscriptionPersistence _subscriptionPersistence;
         private readonly IAlreadyProcessedUrlsPersistence _alreadyProcessedUrlsPersistence;
 
-        public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger, QueryExecutor queryExecutor,
+        public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger, 
+            QueryExecutor queryExecutor, QueryCounter queryCounter,
             ISubscriptionPersistence subscriptionPersistence, IAlreadyProcessedUrlsPersistence alreadyProcessedUrlsPersistence)
         {
             _outgoingNotifications = outgoingNotifications;
             _parserProvider = parserProvider;
             _queryExecutor = queryExecutor;
+            _queryCounter = queryCounter;
             _logger = logger;
             _subscriptionPersistence = subscriptionPersistence;
             _alreadyProcessedUrlsPersistence = alreadyProcessedUrlsPersistence;
@@ -46,8 +50,11 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 }
                 _alreadyProcessedUrlsPersistence.SaveData();
 
-                _logger.Information("Processed all subscriptions. Waiting 5 minutes...");
-                Thread.Sleep(TimeSpan.FromMinutes(5));
+                _logger.Information("Processed all subscriptions. Will repeat when the query counter allows it.");
+                while (!_queryCounter.AcquirePermissionForQuery(LogEventLevel.Verbose))  // Avoid flooding logs
+                {
+                    Thread.Sleep(TimeSpan.FromSeconds(10));
+                }
             }
         }
 
@@ -155,7 +162,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                     }
 
                     _logger.Information($"Found match: {result.Link}");
-                    _outgoingNotifications.NotifySubscribers(subscription, result); // TODO: If we have two Subscribers with the same subscription, this will alert both on run for Subscriber 1. On run for Subscriber 2, both will be alerted again.
+                    _outgoingNotifications.NotifySubscribers(subscription, result);
                 }
                 else
                 {

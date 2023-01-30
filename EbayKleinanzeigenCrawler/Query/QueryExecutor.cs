@@ -10,7 +10,7 @@ namespace KleinanzeigenCrawler.Query
 {
     public class QueryExecutor
     {
-        private readonly ConcurrentDictionary<Uri, (DateTime dateAdded, HtmlDocument html)> _uriCache = new ConcurrentDictionary<Uri, (DateTime, HtmlDocument)>();
+        private readonly ConcurrentDictionary<Uri, (DateTime dateAdded, HtmlDocument html)> _uriCache = new();
         private readonly QueryCounter _queryCounter;
         private readonly ILogger _logger;
 
@@ -34,7 +34,7 @@ namespace KleinanzeigenCrawler.Query
             
             DateTime startTime = DateTime.Now;
             
-            while (DateTime.Now < startTime + _queryCounter.TimeSpanMinutes)
+            while (DateTime.Now < startTime + _queryCounter.TimeToWaitBetweenMaxAmountOfRequests)
             {
                 if (_queryCounter.AcquirePermissionForQuery())
                 {
