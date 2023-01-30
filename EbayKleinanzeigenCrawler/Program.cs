@@ -17,8 +17,9 @@ namespace KleinanzeigenCrawler
 {
     public class Program
     {
-        private static void Main(string[] args)
+        private static void Main(string[] _)
         {
+            DotNetEnv.Env.Load();
             var serviceCollection = ConfigureServices();
 
             var logger = serviceCollection.GetService<ILogger>();
@@ -51,7 +52,7 @@ namespace KleinanzeigenCrawler
             serviceCollection.AddTransient<IParser, EbayKleinanzeigenParser>();
 
             serviceCollection.AddSingleton<ILogger>((_) => new LoggerConfiguration()
-                .MinimumLevel.Verbose()
+                .MinimumLevel.Debug()
                 .Enrich.FromLogContext()
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}")
                 .WriteTo.File(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level}] {SourceContext}{Message:lj} {Exception}{NewLine}", path: Path.Join("data", "logfile.txt"), rollOnFileSizeLimit: true, fileSizeLimitBytes: 1 * 1024 * 1024)
