@@ -1,8 +1,8 @@
 ﻿using System;
 using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Parser.Implementations;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Models;
-using KleinanzeigenCrawler.Parser;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EbayKleinanzeigenCrawler.Parser
@@ -20,9 +20,13 @@ namespace EbayKleinanzeigenCrawler.Parser
         {
             var subscriptionQueryUrl = subscription.QueryUrl.ToString();
 
-            if (subscriptionQueryUrl.Contains("ebay-kleinanzeigen"))
+            if (subscriptionQueryUrl.Contains("ebay-kleinanzeigen.de"))
             {
                 return _serviceProvider.GetService<EbayKleinanzeigenParser>();
+            }
+            else if (subscriptionQueryUrl.Contains("zypresse.com"))
+            {
+                return _serviceProvider.GetService<ZypresseParser>();
             }
             else
             {

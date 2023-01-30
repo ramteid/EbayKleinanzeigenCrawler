@@ -3,7 +3,6 @@ using System.IO;
 using EbayKleinanzeigenCrawler.Storage;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Manager;
-using KleinanzeigenCrawler.Parser;
 using KleinanzeigenCrawler.Query;
 using KleinanzeigenCrawler.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +11,7 @@ using EbayKleinanzeigenCrawler.Subscriptions;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Persistence;
 using EbayKleinanzeigenCrawler.Parser;
+using EbayKleinanzeigenCrawler.Parser.Implementations;
 
 namespace KleinanzeigenCrawler
 {
@@ -40,16 +40,17 @@ namespace KleinanzeigenCrawler
             var serviceCollection = new ServiceCollection();
 
             serviceCollection.AddSingleton<TelegramManager>();
-            serviceCollection.AddSingleton<EbayKleinanzeigenParser>();
             serviceCollection.AddSingleton<IOutgoingNotifications>(s => s.GetService<TelegramManager>());
             serviceCollection.AddSingleton<ISubscriptionPersistence, SubscriptionPersistence>();
             serviceCollection.AddSingleton<IAlreadyProcessedUrlsPersistence, AlreadyProcessedUrlsPersistence>();
             serviceCollection.AddSingleton<QueryCounter>();
             serviceCollection.AddSingleton<QueryExecutor>();
+            serviceCollection.AddTransient<ZypresseParser>();
+            serviceCollection.AddTransient<EbayKleinanzeigenParser>();
             serviceCollection.AddTransient<SubscriptionHandler>();
             serviceCollection.AddTransient<IParserProvider, ParserProvider>();
             serviceCollection.AddTransient<IDataStorage, JsonStorage>();
-            serviceCollection.AddTransient<IParser, EbayKleinanzeigenParser>();
+            serviceCollection.AddTransient<IParser, ZypresseParser>();
 
             serviceCollection.AddSingleton<ILogger>((_) => new LoggerConfiguration()
                 .MinimumLevel.Debug()
