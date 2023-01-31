@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
+using System.Threading;
 using Serilog;
 using Serilog.Events;
 
@@ -11,8 +12,8 @@ namespace KleinanzeigenCrawler.Query
         /// This interval is used by EbayKleinanzeigen. They only allow 40 queries every 5 minutes. Above that, they obfuscate their HTML.
         /// To make sure not to exceed this limit, it is hard-coded here.
         /// </summary>
-        public readonly TimeSpan TimeToWaitBetweenMaxAmountOfRequests = TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(10);
-        private const uint AllowedRequestsPerTimespan = 40;
+        private readonly TimeSpan _timeToWaitBetweenMaxAmountOfRequests = TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(10);
+        private const uint _allowedRequestsPerTimespan = 40;
 
         private readonly ILogger _logger;
         private readonly ConcurrentQueue<DateTime> _queue = new();
@@ -23,7 +24,24 @@ namespace KleinanzeigenCrawler.Query
             _logger = logger;
         }
 
-        public bool AcquirePermissionForQuery(LogEventLevel logEventLevel = LogEventLevel.Debug)
+        public bool WaitForPermissionForQuery(LogEventLevel logEventLevel = LogEventLevel.Debug)
+        {
+            var queryWaitTimeout = TimeSpan.FromMinutes(10);
+            var sleepTime = TimeSpan.FromSeconds(10);
+            var startTime = DateTime.Now;
+            _logger.Debug($"Awaiting query permission");
+            while (!AcquirePermissionForQuery(logEventLevel))
+            {
+                Thread.Sleep(sleepTime);
+                if (DateTime.Now > startTime + queryWaitTimeout)
+                {
+                    throw new Exception("Permission for query was not granted before the specified timeout");
+                }
+            }
+            return true;
+        }
+
+        private bool AcquirePermissionForQuery(LogEventLevel logEventLevel = LogEventLevel.Debug)
         {
             lock (_lockObject)
             {
@@ -37,14 +55,14 @@ namespace KleinanzeigenCrawler.Query
                 int entriesCount = _queue.Count;
 
                 // If we have made less than 40 calls within the last 5 minutes, we can make another call
-                if (entriesCount < AllowedRequestsPerTimespan)
+                if (entriesCount < _allowedRequestsPerTimespan)
                 {
-                    _logger.Write(logEventLevel, $"Allowed query because only {_queue.Count} queries were made within the last {TimeToWaitBetweenMaxAmountOfRequests.TotalMinutes} minutes");
+                    _logger.Write(logEventLevel, $"Allowed query because only {_queue.Count} queries were made within the last {_timeToWaitBetweenMaxAmountOfRequests.TotalMinutes} minutes");
                     _queue.Enqueue(DateTime.Now);
                     return true;
                 }
 
-                _logger.Write(logEventLevel, $"Disallowed query because {_queue.Count} queries were made within the last {TimeToWaitBetweenMaxAmountOfRequests.TotalMinutes} minutes");
+                _logger.Write(logEventLevel, $"Disallowed query because {_queue.Count} queries were made within the last {_timeToWaitBetweenMaxAmountOfRequests.TotalMinutes} minutes");
                 return false;
             }
         }
@@ -52,7 +70,7 @@ namespace KleinanzeigenCrawler.Query
         private bool IsOldestTooOld()
         {
             bool queueHasElements = _queue.TryPeek(out DateTime oldest);
-            bool tooOld = oldest < DateTime.Now.Subtract(TimeToWaitBetweenMaxAmountOfRequests);
+            bool tooOld = oldest < DateTime.Now.Subtract(_timeToWaitBetweenMaxAmountOfRequests);
             return queueHasElements && tooOld;
         }
     }

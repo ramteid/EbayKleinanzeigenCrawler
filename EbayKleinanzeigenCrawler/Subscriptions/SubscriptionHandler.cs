@@ -17,14 +17,14 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
     {
         private readonly IOutgoingNotifications _outgoingNotifications;
         private readonly IParserProvider _parserProvider;
-        private readonly QueryExecutor _queryExecutor;
+        private readonly IQueryExecutor _queryExecutor;
         private readonly QueryCounter _queryCounter;
         private readonly ILogger _logger;
         private readonly ISubscriptionPersistence _subscriptionPersistence;
         private readonly IAlreadyProcessedUrlsPersistence _alreadyProcessedUrlsPersistence;
 
-        public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger, 
-            QueryExecutor queryExecutor, QueryCounter queryCounter,
+        public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger,
+            IQueryExecutor queryExecutor, QueryCounter queryCounter,
             ISubscriptionPersistence subscriptionPersistence, IAlreadyProcessedUrlsPersistence alreadyProcessedUrlsPersistence)
         {
             _outgoingNotifications = outgoingNotifications;
@@ -57,10 +57,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 // Avoid flooding the API and the logs
                 _logger.Information("Processed all subscriptions. Waiting to resume.");
                 Thread.Sleep(TimeSpan.FromSeconds(60));
-                while (!_queryCounter.AcquirePermissionForQuery(LogEventLevel.Verbose))
-                {
-                    Thread.Sleep(TimeSpan.FromSeconds(10));
-                }
+                _queryCounter.WaitForPermissionForQuery(LogEventLevel.Verbose);
             }
         }
 
@@ -69,22 +66,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             bool firstRun = alreadyProcessedLinks.Count == 0;
             var parser = _parserProvider.GetParser(subscription);
 
-            List<Result> newResults;
-            try
-            {
-                newResults = GetNewLinks(parser, subscription, alreadyProcessedLinks);
-            }
-            catch (HtmlParseException e)
-            {
-                // When HTML could not be parsed
-                _logger.Warning(e.Message);
-                return;
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e, e.Message);
-                return;
-            }
+            var newResults = GetNewLinks(parser, subscription, alreadyProcessedLinks);
 
             _logger.Information($"Analyzing {newResults.Count} new links, {alreadyProcessedLinks.Count} were already processed");
 
@@ -95,11 +77,14 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
 
         private List<Result> GetNewLinks(IParser parser, Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks)
         {
-            HtmlDocument document = _queryExecutor.GetHtml(subscription.QueryUrl, useCache: false);
+            if (!_queryExecutor.GetHtml(subscription.QueryUrl, useCache: false, parser.InvalidHtml, htmlDocument: out var htmlDocument))
+            {
+                return new List<Result>();
+            }
 
             // TODO: Only check additional pages, if it's the first run for the subscription OR the first run after application restart
-            var additionalPages = parser.GetAdditionalPages(document); // TODO: Limit to n pages?
-            _logger.Information($"{additionalPages.Count} additional pages found");
+            var additionalPages = parser.GetAdditionalPages(htmlDocument); // TODO: Limit to n pages?
+            _logger.Debug($"{additionalPages.Count} additional pages found");
 
             var newResults = new List<Result>();
 
@@ -107,30 +92,33 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             {
                 var page = additionalPages.ElementAt(i);
 
-                var documentNextPage = _queryExecutor.GetHtml(page, useCache: false);
+                if (!_queryExecutor.GetHtml(page, useCache: false, parser.InvalidHtml, htmlDocument: out var htmlDocumentNextPage))
+                {
+                    continue;
+                }
 
-                var linksFromAdditionalPage = parser.ParseLinks(documentNextPage).ToList();
+                var linksFromAdditionalPage = parser.ParseLinks(htmlDocumentNextPage).ToList();
                 UpdateAlreadyProcessedLinkLastFoundDate(alreadyProcessedLinks, linksFromAdditionalPage);
-                _logger.Information($"Found {linksFromAdditionalPage.Count} links on page {i + 2}");
+                _logger.Debug($"Found {linksFromAdditionalPage.Count} links on page {i + 2}");
 
                 var newLinksFromAdditionalPage = linksFromAdditionalPage
                     .Where(l => !alreadyProcessedLinks.Select(a => a.Uri).Contains(l.Link))
                     .Reverse() // Arrange the oldest entries at the beginning
                     .ToList();
-                _logger.Information($"{newLinksFromAdditionalPage.Count} links of them are new");
+                _logger.Debug($"{newLinksFromAdditionalPage.Count} links of them are new");
 
                 newResults.AddRange(newLinksFromAdditionalPage);
             }
 
-            var linksFromFirstPage = parser.ParseLinks(document).ToList();
+            var linksFromFirstPage = parser.ParseLinks(htmlDocument).ToList();
             UpdateAlreadyProcessedLinkLastFoundDate(alreadyProcessedLinks, linksFromFirstPage);
-            _logger.Information($"Found {linksFromFirstPage.Count} links on page 1");
+            _logger.Debug($"Found {linksFromFirstPage.Count} links on page 1");
 
             var newResultsPage1 = linksFromFirstPage
                 .Where(l => !alreadyProcessedLinks.Select(a => a.Uri).Contains(l.Link))
                 .Reverse()
                 .ToList();
-            _logger.Information($"{newResultsPage1.Count} links of them are new");
+            _logger.Debug($"{newResultsPage1.Count} links of them are new");
 
             return newResults.Concat(newResultsPage1).ToList();
         }
@@ -151,26 +139,12 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
         {
             foreach (Result result in newResults)
             {
-                bool match;
-                HtmlDocument document;
-                try
+                if (!_queryExecutor.GetHtml(result.Link, useCache: true, invalidHtml: parser.InvalidHtml, htmlDocument: out var htmlDocument))
                 {
-                    document = _queryExecutor.GetHtml(result.Link);
-                    match = parser.IsMatch(document, subscription);
-                }
-                catch (HtmlParseException e)
-                {
-                    // When HTML could not be parsed
-                    _logger.Warning(e.Message);
                     continue;
                 }
-                catch (Exception e)
-                {
-                    _logger.Error(e, e.Message);
-                    continue;
-                }
-
-                if (match)
+                
+                if (parser.IsMatch(htmlDocument, subscription))
                 {
                     if (firstRun && !subscription.InitialPull)
                     {

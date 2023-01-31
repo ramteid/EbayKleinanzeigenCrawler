@@ -40,11 +40,12 @@ namespace KleinanzeigenCrawler
             var serviceCollection = new ServiceCollection();
 
             serviceCollection.AddSingleton<TelegramManager>();
-            serviceCollection.AddSingleton<IOutgoingNotifications>(s => s.GetService<TelegramManager>());
+            serviceCollection.AddSingleton<ConsoleManager>();
+            serviceCollection.AddSingleton(SelectNotificationManager());
             serviceCollection.AddSingleton<ISubscriptionPersistence, SubscriptionPersistence>();
             serviceCollection.AddSingleton<IAlreadyProcessedUrlsPersistence, AlreadyProcessedUrlsPersistence>();
             serviceCollection.AddSingleton<QueryCounter>();
-            serviceCollection.AddSingleton<QueryExecutor>();
+            serviceCollection.AddTransient<IQueryExecutor, QueryExecutor>();
             serviceCollection.AddTransient<ZypresseParser>();
             serviceCollection.AddTransient<EbayKleinanzeigenParser>();
             serviceCollection.AddTransient<SubscriptionHandler>();
@@ -60,6 +61,20 @@ namespace KleinanzeigenCrawler
                 .CreateLogger());
 
             return serviceCollection.BuildServiceProvider();
+        }
+
+        private static Func<IServiceProvider, IOutgoingNotifications> SelectNotificationManager()
+        {
+            var manager = Environment.GetEnvironmentVariable("NOTIFICATION_MANAGER");
+            switch (manager)
+            {
+                case "CONSOLE":
+                    Console.WriteLine($"Notification manager: {manager}");
+                    return s => s.GetService<ConsoleManager>();
+                default:
+                    Console.WriteLine($"Notification manager: Telegram");
+                    return s => s.GetService<TelegramManager>();
+            }
         }
     }
 }

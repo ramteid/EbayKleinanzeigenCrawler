@@ -33,7 +33,10 @@ namespace KleinanzeigenCrawler.Manager
                 while (true)
                 {
                     string input = Console.ReadLine();
-                    ProcessCommand(ConsoleSubscriberId, input);
+                    if (!string.IsNullOrWhiteSpace(input))
+                    {
+                        ProcessCommand(ConsoleSubscriberId, input);
+                    }
                     Thread.Sleep(TimeSpan.FromMilliseconds(500));
                 }
             });

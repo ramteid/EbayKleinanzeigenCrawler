@@ -11,17 +11,16 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
     public class EbayKleinanzeigenParser : ParserBase
     {
         private const string BaseUrl = "https://www.ebay-kleinanzeigen.de";
-        private const string InvalidHtml = "<html><head><meta charset=\"utf-8\"><script>"; // When the source code is obfuscated with JS
-
+        public override string InvalidHtml { get => "<html><head><meta charset=\"utf-8\"><script>"; }
         public EbayKleinanzeigenParser(ILogger logger) : base(logger) { }
 
         protected override void EnsureValidHtml(HtmlDocument resultPage)
         {
             // TODO: An URL with query params seems to forget the query keywords and searches for anything. Do not allow ? in URLs.
             // e.g. /s-anzeigen/96123/anzeige:angebote/lescha-betonmischer/c0-l6895?distance=50&maxPrice=100
-            if (resultPage.Text.StartsWith(InvalidHtml))
+            if (resultPage.Text.StartsWith(InvalidHtml) || resultPage.Text.Contains("429 Too many requests from"))
             {
-                throw new HtmlParseException("Invalid HTML detected. Skipping parsing");
+                throw new Exception("Invalid HTML detected. Skipping parsing");
             }
         }
 
@@ -93,6 +92,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
 
             if (string.IsNullOrWhiteSpace(date))
             {
+                Logger.Error(result.InnerHtml);
                 Logger.Error("Could not parse date");
             }
 
@@ -109,6 +109,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
 
             if (string.IsNullOrWhiteSpace(price))
             {
+                Logger.Error(result.InnerHtml);
                 Logger.Error("Could not parse price");
             }
 

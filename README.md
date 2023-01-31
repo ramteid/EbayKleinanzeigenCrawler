@@ -13,13 +13,15 @@
 
 # Before use:
 * Create your own Telegram Bot
+* If you you want to test it without Telegram, set the environment variable `NOTIFICATION_MANAGER` to `CONSOLE` to get notifications on the console.
 * Modify the `.env` file and set the environment variable `TELEGRAM_BOT_TOKEN` to your token. 
 
 # How to use:
+* (After each change to the code) Build the app with `docker-compose build`
 * Start the container with `docker-compose up`
 * Send /help to the Telegram bot for instructions
-* Currently only works with Desktop-Browser links, not mobile browser links. (https://www.ebay-kleinanzeigen.de/....)
-* Ebay Kleinanzeigen obfuscates its HTML with JavaScript, when more than 40 queries are made within the last 5 minutes. This software considers this limit.
+* Currently only works with Desktop-Browser links, not mobile browser links. (e. g. https://www.ebay-kleinanzeigen.de/....)
+* Ebay Kleinanzeigen blocks requests when there are too many requests. This software considers this limit.
 * This software is work in progress. There are many TODOs in the code. Feel free to contribute :-)
 
 # Developing within a VSCode Devcontainer
