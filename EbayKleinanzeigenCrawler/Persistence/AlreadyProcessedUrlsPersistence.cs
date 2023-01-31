@@ -23,7 +23,7 @@ namespace EbayKleinanzeigenCrawler.Persistence
             RestoreData();
         }
 
-        public List<Uri> GetOrAdd(Guid id)
+        public List<Uri> GetOrAddSubscription(Guid id)
         {
             return _alreadyProcessedUrls.GetOrAdd(id, valueFactory: _ => new List<Uri>());
         }

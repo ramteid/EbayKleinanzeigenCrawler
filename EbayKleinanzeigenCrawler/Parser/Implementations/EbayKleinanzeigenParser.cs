@@ -38,7 +38,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
             if (isProShopLink)
             {
                 // Filter out Pro-Shop links
-                Logger.Debug("Skipping Pro-Shop link");
+                Logger.Verbose("Skipping Pro-Shop link");
                 return true;
             }
 

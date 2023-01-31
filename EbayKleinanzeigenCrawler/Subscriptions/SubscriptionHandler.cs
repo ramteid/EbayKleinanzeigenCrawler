@@ -44,14 +44,18 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 foreach (Subscription subscription in subscriptions)
                 {
                     _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
-                    List<Uri> alreadyProcessedUrls = _alreadyProcessedUrlsPersistence.GetOrAdd(subscription.Id);
+                    
+                    List<Uri> alreadyProcessedUrls = _alreadyProcessedUrlsPersistence.GetOrAddSubscription(subscription.Id);
                     ProcessSubscription(subscription, alreadyProcessedUrls);
+                    
                     _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
+                    _alreadyProcessedUrlsPersistence.SaveData();
                 }
-                _alreadyProcessedUrlsPersistence.SaveData();
 
+                // Avoid flooding the API and the logs
                 _logger.Information("Processed all subscriptions. Will repeat when the query counter allows it.");
-                while (!_queryCounter.AcquirePermissionForQuery(LogEventLevel.Verbose))  // Avoid flooding logs
+                Thread.Sleep(TimeSpan.FromSeconds(60));
+                while (!_queryCounter.AcquirePermissionForQuery(LogEventLevel.Verbose))
                 {
                     Thread.Sleep(TimeSpan.FromSeconds(10));
                 }
@@ -126,8 +130,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 .ToList();
             _logger.Information($"{newResultsPage1.Count} links of them are new");
 
-            var x= newResults.Concat(newResultsPage1).ToList();
-            return x;
+            return newResults.Concat(newResultsPage1).ToList();
         }
 
         private void CheckForMatches(IParser parser, Subscription subscription, List<Uri> alreadyProcessedLinks, List<Result> newResults, bool firstRun)
@@ -157,7 +160,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 {
                     if (firstRun && !subscription.InitialPull)
                     {
-                        _logger.Information($"Not notifying about match because it's the first run: {result.Link}");
+                        _logger.Debug($"Not notifying about match: {result.Link}");
                         continue;
                     }
 
