@@ -5,6 +5,7 @@ using System.Threading;
 using KleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
 using Serilog;
+using EbayKleinanzeigenCrawler.Models;
 
 namespace KleinanzeigenCrawler.Query
 {
@@ -64,15 +65,15 @@ namespace KleinanzeigenCrawler.Query
         /// Hint: Inconsistency when multiple subscriptions contain the same URL.
         /// </summary>
         /// <param name="alreadyProcessedUrls">List of already processed URLs</param>
-        public void FreeCache(List<Uri> alreadyProcessedUrls)
+        public void FreeCache(List<AlreadyProcessedUrl> alreadyProcessedUrls)
         {
-            foreach (Uri url in alreadyProcessedUrls)
+            foreach (var alreadyProcessedUrl in alreadyProcessedUrls)
             {
-                if (_uriCache.TryGetValue(url, out (DateTime dateAdded, HtmlDocument html) cachedEntry)) // TODO: check if it makes sense to remove an already processed URL from the cache immediately.
+                if (_uriCache.TryGetValue(alreadyProcessedUrl.Uri, out (DateTime dateAdded, HtmlDocument html) cachedEntry)) // TODO: check if it makes sense to remove an already processed URL from the cache immediately.
                 {
                     if (cachedEntry.dateAdded < DateTime.Now - TimeSpan.FromDays(1))
                     {
-                        _uriCache.Remove(url, out (DateTime dateAdded, HtmlDocument html) _);
+                        _uriCache.Remove(alreadyProcessedUrl.Uri, out (DateTime dateAdded, HtmlDocument html) _);
                     }
                 }
             }
