@@ -9,6 +9,7 @@ using Serilog;
 using EbayKleinanzeigenCrawler.Interfaces;
 using System.Threading;
 using Serilog.Events;
+using EbayKleinanzeigenCrawler.Models;
 
 namespace EbayKleinanzeigenCrawler.Subscriptions
 {
@@ -37,6 +38,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
 
         public void Run()
         {
+            _alreadyProcessedUrlsPersistence.RestoreData();
             while (true)
             {
                 List<Subscription> subscriptions = _subscriptionPersistence.GetEnabledSubscriptions();
@@ -45,7 +47,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 {
                     _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
                     
-                    List<Uri> alreadyProcessedUrls = _alreadyProcessedUrlsPersistence.GetOrAddSubscription(subscription.Id);
+                    var alreadyProcessedUrls = _alreadyProcessedUrlsPersistence.GetAlreadyProcessedLinksForSubscripition(subscription.Id);
                     ProcessSubscription(subscription, alreadyProcessedUrls);
                     
                     _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
@@ -53,7 +55,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                 }
 
                 // Avoid flooding the API and the logs
-                _logger.Information("Processed all subscriptions. Will repeat when the query counter allows it.");
+                _logger.Information("Processed all subscriptions. Waiting to resume.");
                 Thread.Sleep(TimeSpan.FromSeconds(60));
                 while (!_queryCounter.AcquirePermissionForQuery(LogEventLevel.Verbose))
                 {
@@ -62,7 +64,7 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             }
         }
 
-        private void ProcessSubscription(Subscription subscription, List<Uri> alreadyProcessedLinks)
+        private void ProcessSubscription(Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks)
         {
             bool firstRun = alreadyProcessedLinks.Count == 0;
             var parser = _parserProvider.GetParser(subscription);
@@ -91,41 +93,41 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             _queryExecutor.FreeCache(alreadyProcessedLinks);
         }
 
-        private List<Result> GetNewLinks(IParser parser, Subscription subscription, List<Uri> alreadyProcessedLinks)
+        private List<Result> GetNewLinks(IParser parser, Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks)
         {
             HtmlDocument document = _queryExecutor.GetHtml(subscription.QueryUrl, useCache: false);
 
             // TODO: Only check additional pages, if it's the first run for the subscription OR the first run after application restart
-            List<Uri> additionalPages = parser.GetAdditionalPages(document); // TODO: Limit to n pages?
+            var additionalPages = parser.GetAdditionalPages(document); // TODO: Limit to n pages?
             _logger.Information($"{additionalPages.Count} additional pages found");
 
             var newResults = new List<Result>();
 
             for (int i = additionalPages.Count - 1; i >= 0; i--)
             {
-                Uri page = additionalPages.ElementAt(i);
+                var page = additionalPages.ElementAt(i);
 
-                HtmlDocument documentNextPage = _queryExecutor.GetHtml(page, useCache: false);
+                var documentNextPage = _queryExecutor.GetHtml(page, useCache: false);
 
-                List<Result> linksFromAdditionalPage = parser.ParseLinks(documentNextPage).ToList();
+                var linksFromAdditionalPage = parser.ParseLinks(documentNextPage).ToList();
+                UpdateAlreadyProcessedLinkLastFoundDate(alreadyProcessedLinks, linksFromAdditionalPage);
                 _logger.Information($"Found {linksFromAdditionalPage.Count} links on page {i + 2}");
 
-                List<Result> newLinksFromAdditionalPage = linksFromAdditionalPage
-                    .Where(l => !alreadyProcessedLinks.Contains(l.Link))
+                var newLinksFromAdditionalPage = linksFromAdditionalPage
+                    .Where(l => !alreadyProcessedLinks.Select(a => a.Uri).Contains(l.Link))
+                    .Reverse() // Arrange the oldest entries at the beginning
                     .ToList();
                 _logger.Information($"{newLinksFromAdditionalPage.Count} links of them are new");
-
-                // Arrange the oldest entries at the beginning
-                newLinksFromAdditionalPage.Reverse();
 
                 newResults.AddRange(newLinksFromAdditionalPage);
             }
 
-            List<Result> results = parser.ParseLinks(document).ToList();
-            _logger.Information($"Found {results.Count} links on page 1");
+            var linksFromFirstPage = parser.ParseLinks(document).ToList();
+            UpdateAlreadyProcessedLinkLastFoundDate(alreadyProcessedLinks, linksFromFirstPage);
+            _logger.Information($"Found {linksFromFirstPage.Count} links on page 1");
 
-            List<Result> newResultsPage1 = results
-                .Where(l => !alreadyProcessedLinks.Contains(l.Link))
+            var newResultsPage1 = linksFromFirstPage
+                .Where(l => !alreadyProcessedLinks.Select(a => a.Uri).Contains(l.Link))
                 .Reverse()
                 .ToList();
             _logger.Information($"{newResultsPage1.Count} links of them are new");
@@ -133,7 +135,19 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
             return newResults.Concat(newResultsPage1).ToList();
         }
 
-        private void CheckForMatches(IParser parser, Subscription subscription, List<Uri> alreadyProcessedLinks, List<Result> newResults, bool firstRun)
+        private static void UpdateAlreadyProcessedLinkLastFoundDate(List<AlreadyProcessedUrl> alreadyProcessedLinks, List<Result> linksFromAdditionalPage)
+        {
+            foreach (var link in linksFromAdditionalPage)
+            {
+                var processedLink = alreadyProcessedLinks.SingleOrDefault(l => l.Uri.Equals(link));
+                if (processedLink is not null)
+                {
+                    processedLink.LastFound = DateTime.Now;
+                }
+            }
+        }
+
+        private void CheckForMatches(IParser parser, Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks, List<Result> newResults, bool firstRun)
         {
             foreach (Result result in newResults)
             {
@@ -172,7 +186,11 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                     _logger.Debug($"No match: {result.Link}");
                 }
 
-                alreadyProcessedLinks.Add(result.Link);
+                alreadyProcessedLinks.Add(new AlreadyProcessedUrl
+                {
+                    Uri = result.Link,
+                    LastFound = DateTime.Now
+                });
             }
         }
     }
