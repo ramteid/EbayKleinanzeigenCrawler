@@ -10,7 +10,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
     public class ZypresseParser : ParserBase
     {
         private const string BaseUrl = "https://www.zypresse.com";
-
+        public override string InvalidHtml { get => "<html><head><meta charset=\"utf-8\"><script>"; }
         public ZypresseParser(ILogger logger) : base(logger) { }
 
         public override List<Uri> GetAdditionalPages(HtmlDocument document)
@@ -32,7 +32,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
             var html = resultPage.DocumentNode.InnerHtml;
             if (!html.Contains("listAdlistAd"))
             {
-                throw new Exception("Could not find any results in Zypresse page");
+                throw new Exception("Could not find any results on Zypresse page");
             }
         }
 

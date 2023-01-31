@@ -86,7 +86,7 @@ namespace EbayKleinanzeigenCrawler.Persistence
                     _alreadyProcessedUrlsPerSubscription.TryAdd(subscriptionId, uris);
                 }
 
-                _logger.Information($"Restored processed URLs for {_alreadyProcessedUrlsPerSubscription.Count} subscriptions");
+                _logger.Information($"Conversion finished. Restored processed URLs for {_alreadyProcessedUrlsPerSubscription.Count} subscriptions");
             }
             catch (Exception e1)
             {

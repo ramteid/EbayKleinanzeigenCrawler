@@ -17,6 +17,8 @@ namespace KleinanzeigenCrawler.Parser
             Logger = logger;
         }
 
+        public abstract string InvalidHtml { get; }
+
         protected abstract void EnsureValidHtml(HtmlDocument resultPage);
 
         public abstract List<Uri> GetAdditionalPages(HtmlDocument document);
@@ -37,6 +39,7 @@ namespace KleinanzeigenCrawler.Parser
 
         public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
         {
+            EnsureValidHtml(resultPage);
             List<HtmlNode> results = ParseResults(resultPage);
 
             if (results is null)
@@ -56,7 +59,7 @@ namespace KleinanzeigenCrawler.Parser
                 Uri link = ParseResultLink(result);
                 string date = ParseResultDate(result);
                 string price = ParseResultPrice(result);
-                yield return new Result { Link = link, CreationDate = date ?? "?", Price = price ?? "" };
+                yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
             }
         }
 
@@ -81,13 +84,15 @@ namespace KleinanzeigenCrawler.Parser
             string title = ParseTitle(document);
             if (string.IsNullOrWhiteSpace(title))
             {
-                throw new NullReferenceException("Could not parse title");
+                Logger.Error(document.DocumentNode.InnerHtml);
+                throw new Exception("Could not parse title");
             }
 
             string descriptionText = ParseDescriptionText(document);
             if (string.IsNullOrWhiteSpace(descriptionText))
             {
-                throw new NullReferenceException("Could not parse description");
+                Logger.Error(document.DocumentNode.InnerHtml);
+                throw new Exception("Could not parse description");
             }
 
             bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);

@@ -64,7 +64,8 @@ namespace KleinanzeigenCrawler.Manager
         {
             var ErrorMessage = exception switch
             {
-                ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}", _ => exception.ToString()
+                ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}", 
+                _ => exception.ToString()
             };
 
             _logger.Error(ErrorMessage);
