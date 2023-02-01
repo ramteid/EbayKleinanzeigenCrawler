@@ -24,6 +24,10 @@
 * Ebay Kleinanzeigen blocks requests when there are too many requests. This software considers this limit.
 * This software is work in progress. There are many TODOs in the code. Feel free to contribute :-)
 
+## Example usage
+![Adding a subscription](docs/add.jpg)
+
+
 # Developing within a VSCode Devcontainer
 * Download the VSCode Extension [Remote Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 * Create a `.env`-file in the repository root and set the variable `TELEGRAM_BOT_TOKEN=<TOKEN>` if you don't want to set it manually later
