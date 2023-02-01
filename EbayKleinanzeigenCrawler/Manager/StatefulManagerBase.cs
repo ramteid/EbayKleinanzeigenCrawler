@@ -269,15 +269,15 @@ namespace KleinanzeigenCrawler.Manager
 
         private void StartAddingSubscription(Subscriber subscriber)
         {
-            SendMessage(subscriber, "Paste the URL of a Ebay Kleinanzeigen search page. Use most exact search filters and avoid too many results.");
-            SendMessage(subscriber, "Currently, no URLs of mobile devices are supported. The URL must begin with 'https://www.ebay-kleinanzeigen.de/....'", enablePreview: false); // TODO: Verify URL instead
+            SendMessage(subscriber, "Paste the URL of a search page. The URL must contain all search parameters. Use most exact search filters and avoid too many results.");
+            SendMessage(subscriber, "Currently, no mobile URLs are supported, please copy the URL from a Desktop browser.'", enablePreview: false); // TODO: Verify URL instead
             subscriber.State = InputState.WaitingForUrl;
         }
 
         private void AnalyzeInputUrl(string messageText, Subscriber subscriber)
         {
             // TODO: Create proper URL validation in Parser class and call it from here
-            if (!messageText.StartsWith("https://www.ebay-kleinanzeigen.de/"))
+            if (!messageText.StartsWith("https://www."))
             {
                 SendMessage(subscriber, "Please enter a valid URL only");
                 return;
