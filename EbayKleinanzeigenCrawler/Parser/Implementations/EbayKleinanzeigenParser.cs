@@ -92,8 +92,8 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
 
             if (string.IsNullOrWhiteSpace(date))
             {
-                Logger.Error(result.InnerHtml);
-                Logger.Error("Could not parse date");
+                Logger.Debug(result.InnerHtml);
+                Logger.Warning("Could not parse date");
             }
 
             return date;
@@ -109,8 +109,8 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
 
             if (string.IsNullOrWhiteSpace(price))
             {
-                Logger.Error(result.InnerHtml);
-                Logger.Error("Could not parse price");
+                Logger.Debug(result.InnerHtml);
+                Logger.Warning("Could not parse price");
             }
 
             return price;
