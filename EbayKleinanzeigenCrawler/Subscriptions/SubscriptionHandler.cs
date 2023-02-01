@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using KleinanzeigenCrawler.Interfaces;
@@ -144,7 +144,18 @@ namespace EbayKleinanzeigenCrawler.Subscriptions
                     continue;
                 }
                 
-                if (parser.IsMatch(htmlDocument, subscription))
+                bool isMatch;
+                try
+                {
+                    isMatch = parser.IsMatch(htmlDocument, subscription);
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e, "Skipping this link");
+                    continue;
+                }
+
+                if (isMatch)
                 {
                     if (firstRun && !subscription.InitialPull)
                     {

@@ -85,14 +85,14 @@ namespace KleinanzeigenCrawler.Parser
             if (string.IsNullOrWhiteSpace(title))
             {
                 Logger.Error(document.DocumentNode.InnerHtml);
-                throw new Exception("Could not parse title");
+                throw new InvalidOperationException("Could not parse title");
             }
 
             string descriptionText = ParseDescriptionText(document);
             if (string.IsNullOrWhiteSpace(descriptionText))
             {
                 Logger.Error(document.DocumentNode.InnerHtml);
-                throw new Exception("Could not parse description");
+                throw new InvalidOperationException("Could not parse description");
             }
 
             bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
