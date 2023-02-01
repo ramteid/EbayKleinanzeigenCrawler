@@ -53,7 +53,7 @@ namespace EbayKleinanzeigenCrawler.Persistence
                 catch (JsonSerializationException e) when (e.Message.StartsWith("Error converting value"))
                 {
                     _logger.Warning($"Value conversion error when loading '{FilePath}'. Assuming this is because the file has the old format. Attempting conversion.");
-                    TryParseOldFormatFile();
+                    TryConvertOldFormatFile();
                 }
                 catch (Exception e)
                 {
@@ -66,11 +66,17 @@ namespace EbayKleinanzeigenCrawler.Persistence
             SaveData();
         }
 
-        private void TryParseOldFormatFile()
+        private void TryConvertOldFormatFile()
         {
             try
             {
+                var backup = FilePath + ".bak";
+                if (!File.Exists(backup))
+                {
+                    File.Copy(FilePath, backup);
+                }
                 DataStorage.Load(FilePath, out ConcurrentDictionary<Guid, List<Uri>> oldData);
+                _alreadyProcessedUrlsPerSubscription = new ConcurrentDictionary<Guid, List<AlreadyProcessedUrl>>();
                 foreach (var item in oldData)
                 {
                     var subscriptionId = item.Key;
@@ -82,16 +88,15 @@ namespace EbayKleinanzeigenCrawler.Persistence
                         })
                         .ToList();
 
-                    _alreadyProcessedUrlsPerSubscription = new ConcurrentDictionary<Guid, List<AlreadyProcessedUrl>>();
                     _alreadyProcessedUrlsPerSubscription.TryAdd(subscriptionId, uris);
                 }
 
+                SaveData();
                 _logger.Information($"Conversion finished. Restored processed URLs for {_alreadyProcessedUrlsPerSubscription.Count} subscriptions");
             }
             catch (Exception e1)
             {
-                _logger.Error(e1, "Conversion failed! Assuming broken file. Creating backup and starting clean");
-                File.Move(FilePath, FilePath + ".bak");
+                _logger.Error(e1, "Conversion failed! Assuming broken file. Starting clean");
                 _alreadyProcessedUrlsPerSubscription = new ConcurrentDictionary<Guid, List<AlreadyProcessedUrl>>();
             }
         }
