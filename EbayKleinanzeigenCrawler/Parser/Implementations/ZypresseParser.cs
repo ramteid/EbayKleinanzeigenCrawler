@@ -18,7 +18,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
             var additionalPages = document.DocumentNode.Descendants("div")
                 .Where(d => d.Attributes.Any(a => a.Name == "class" && a.Value.Contains("pageNaviList")))
                 .SelectMany(d => d.Descendants("a"))
-                .Where(d => d.Attributes.Any(a => a.Name == "class" && a.Value.Contains("pageNaviNextLink")))
+                .Where(d => d.Attributes.Any(a => a.Name == "class" && a.Value.Contains("pageNaviLink")))
                 .Select(d => d.Attributes.SingleOrDefault(a => a.Name == "href"))
                 .Select(a => a?.Value)
                 .Where(l => !string.IsNullOrEmpty(l))
@@ -45,7 +45,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
         protected override List<HtmlNode> ParseResults(HtmlDocument resultPage)
         {
             return resultPage.DocumentNode
-                .SelectNodes("//ul[@id='listAdlistAd']")?
+                .SelectNodes(".//ul[@id='listAdlistAd']")?
                 .Descendants("li")
                 .Where(div => div.GetAttributeValue("class", "").Contains("listEntryObject-ad"))
                 .ToList();
@@ -71,7 +71,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
         protected override string ParseResultDate(HtmlNode result)
         {
             var date = result
-                .SelectNodes("div/div/div/div/div/span[@class='date']")?
+                .SelectNodes(".//span[@class='date']")?
                 .Select(d => d.InnerText)
                 .SingleOrDefault()?
                 .Trim();
@@ -93,7 +93,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
         protected override string ParseTitle(HtmlDocument document)
         {
             return document.DocumentNode
-                .SelectNodes("//*[@id=\"blockContentInner\"]/div[1]/div/div[1]/div/div[2]/div[2]")?
+                .SelectNodes(".//div[contains(@class, 'elementHeadline')]/h1")?
                 .SingleOrDefault()?
                 .InnerText ?? "";
         }
@@ -101,7 +101,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations
         protected override string ParseDescriptionText(HtmlDocument document)
         {
             return document.DocumentNode
-                .SelectNodes("//*[@id=\"blockContentInner\"]/div[1]/div/div[1]/div/div[2]/div[3]/div")?
+                .SelectNodes(".//div[contains(@class, 'elementKleinanzeigeDescriptionContent')]")
                 .SingleOrDefault()?
                 .InnerText ?? "";
         }
