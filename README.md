@@ -1,6 +1,10 @@
 # EbayKleinanzeigenCrawler
 .NET 6 based crawler that parses Ebay Kleinanzeigen classified ads and notifies via a Telegram Bot.
 
+# Currently supported providers
+* ebay-kleinanzeigen.de
+* zypresse.com
+
 # Features:
 * Notifies you reliably about new articles within 5 minutes!
 * Searches for keywords in title and description!
@@ -13,14 +17,14 @@
 
 # Before use:
 * Create your own Telegram Bot
-* If you you want to test it without Telegram, set the environment variable `NOTIFICATION_MANAGER` to `CONSOLE` to get notifications on the console.
+* If you you want to test it without Telegram, set the environment variable `NOTIFICATION_MANAGER` to `CONSOLE` to get notifications along with the logs on the console.
 * Modify the `.env` file and set the environment variable `TELEGRAM_BOT_TOKEN` to your token. 
 
 # How to use:
 * (After each change to the code) Build the app with `docker-compose build`
 * Start the container with `docker-compose up`
 * Send /help to the Telegram bot for instructions
-* Currently only works with Desktop-Browser links, not mobile browser links. (e. g. https://www.ebay-kleinanzeigen.de/....)
+* Currently no mobile browser links are supported, it only works with Desktop-Browser links (e. g. https://www.ebay-kleinanzeigen.de/....)
 * Ebay Kleinanzeigen blocks requests when there are too many requests. This software considers this limit.
 * This software is work in progress. There are many TODOs in the code. Feel free to contribute :-)
 
