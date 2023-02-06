@@ -1,8 +1,7 @@
-﻿namespace KleinanzeigenCrawler.Interfaces
+﻿namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface IDataStorage
 {
-    public interface IDataStorage
-    {
-        void Save<T>(T data, string fileName);
-        void Load<T>(string fileName, out T data);
-    }
+    void Save<T>(T data, string fileName);
+    void Load<T>(string fileName, out T data);
 }

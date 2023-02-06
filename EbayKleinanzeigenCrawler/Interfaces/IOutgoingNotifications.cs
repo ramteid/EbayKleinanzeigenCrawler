@@ -1,9 +1,9 @@
-﻿using KleinanzeigenCrawler.Models;
+﻿using System.Threading.Tasks;
+using EbayKleinanzeigenCrawler.Models;
 
-namespace KleinanzeigenCrawler.Interfaces
+namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface IOutgoingNotifications
 {
-    public interface IOutgoingNotifications
-    {
-        void NotifySubscribers(Subscription subscription, Result newLink);
-    }
+    Task NotifySubscribers(Subscription subscription, Result newLink);
 }
