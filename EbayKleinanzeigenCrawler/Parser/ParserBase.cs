@@ -1,146 +1,166 @@
-﻿using HtmlAgilityPack;
-using KleinanzeigenCrawler.Interfaces;
-using KleinanzeigenCrawler.Models;
-using Serilog;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using EbayKleinanzeigenCrawler.Interfaces;
+using EbayKleinanzeigenCrawler.Models;
+using HtmlAgilityPack;
+using Serilog;
+// ReSharper disable VirtualMemberCallInConstructor
 
-namespace KleinanzeigenCrawler.Parser
+namespace EbayKleinanzeigenCrawler.Parser;
+
+public abstract class ParserBase : IParser
 {
-    public abstract class ParserBase : IParser
+    protected readonly ILogger Logger;
+    private readonly IQueryExecutor _queryExecutor;
+    
+    protected ParserBase(ILogger logger, IQueryExecutor queryExecutor)
     {
-        protected readonly ILogger Logger;
+        Logger = logger;
+        _queryExecutor = queryExecutor;
+        _queryExecutor.Initialize(
+            timeToWaitBetweenMaxAmountOfRequests: TimeToWaitBetweenMaxAmountOfRequests, 
+            allowedRequestsPerTimespan: AllowedRequestsPerTimespan,
+            invalidHtml: InvalidHtml
+        );
+    }
 
-        public ParserBase(ILogger logger)
+    protected abstract TimeSpan TimeToWaitBetweenMaxAmountOfRequests { get; }
+    protected abstract uint AllowedRequestsPerTimespan { get; }
+
+    protected abstract string InvalidHtml { get; }
+
+    protected abstract bool EnsureValidHtml(HtmlDocument resultPage);
+
+    public abstract List<Uri> GetAdditionalPages(HtmlDocument document);
+
+    protected abstract List<HtmlNode> ParseResults(HtmlDocument resultPage);
+
+    protected abstract bool ShouldSkipResult(HtmlNode result);
+
+    protected abstract Uri ParseResultLink(HtmlNode result);
+
+    protected abstract string ParseResultDate(HtmlNode result);
+
+    protected abstract string ParseResultPrice(HtmlNode result);
+
+    protected abstract string ParseTitle(HtmlDocument document);
+
+    protected abstract string ParseDescriptionText(HtmlDocument document);
+
+    public IQueryExecutor GetQueryExecutor()
+    {
+        return _queryExecutor;
+    }
+
+    public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
+    {
+        if (!EnsureValidHtml(resultPage))
         {
-            Logger = logger;
+            Logger.Warning("Skipping parsing link due to invalid HTML");
+            yield break;
+        }
+        
+        var results = ParseResults(resultPage);
+
+        if (results is null)
+        {
+            // When no results are found
+            yield break;
         }
 
-        public abstract string InvalidHtml { get; }
-
-        protected abstract void EnsureValidHtml(HtmlDocument resultPage);
-
-        public abstract List<Uri> GetAdditionalPages(HtmlDocument document);
-
-        protected abstract List<HtmlNode> ParseResults(HtmlDocument resultPage);
-
-        protected abstract bool ShouldSkipResult(HtmlNode result);
-
-        protected abstract Uri ParseResultLink(HtmlNode result);
-
-        protected abstract string ParseResultDate(HtmlNode result);
-
-        protected abstract string ParseResultPrice(HtmlNode result);
-
-        protected abstract string ParseTitle(HtmlDocument document);
-
-        protected abstract string ParseDescriptionText(HtmlDocument document);
-
-        public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
+        foreach (var result in results)
         {
-            EnsureValidHtml(resultPage);
-            List<HtmlNode> results = ParseResults(resultPage);
-
-            if (results is null)
+            if (ShouldSkipResult(result))
             {
-                // When no results are found
-                yield break;
+                continue;
             }
 
-            foreach (HtmlNode result in results)
-            {
-                if (ShouldSkipResult(result))
-                {
-                    continue;
-                }
+            // Validation must happen in the implementations
+            var link = ParseResultLink(result);
+            var date = ParseResultDate(result);
+            var price = ParseResultPrice(result);
+            yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
+        }
+    }
 
-                // Validation must happen in the implementations
-                Uri link = ParseResultLink(result);
-                string date = ParseResultDate(result);
-                string price = ParseResultPrice(result);
-                yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
-            }
+    public virtual bool IsMatch(HtmlDocument document, Subscription subscription)
+    {
+        if (document.DocumentNode.InnerHtml.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        {
+            Logger.Warning("Tried to parse ad which does not exist anymore");
+            return false;
         }
 
-        public virtual bool IsMatch(HtmlDocument document, Subscription subscription)
+        if (subscription.IncludeKeywords is null)
         {
-            if (document.DocumentNode.InnerHtml.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+            throw new InvalidOperationException("IncludeKeywords cannot be null");
+        }
+
+        if (subscription.ExcludeKeywords is null)
+        {
+            throw new InvalidOperationException("ExcludeKeywords cannot be null");
+        }
+
+        var title = ParseTitle(document);
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            Logger.Error(document.DocumentNode.InnerHtml);
+            throw new InvalidOperationException("Could not parse title");
+        }
+
+        var descriptionText = ParseDescriptionText(document);
+        if (string.IsNullOrWhiteSpace(descriptionText))
+        {
+            Logger.Error(document.DocumentNode.InnerHtml);
+            throw new InvalidOperationException("Could not parse description");
+        }
+
+        var allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
+        var excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(subscription, title + descriptionText);
+        return allIncludeKeywordsFound && !excludeKeywordsFound;
+    }
+
+    private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
+    {
+        if (subscription.IncludeKeywords.Count == 0)
+        {
+            return true;
+        }
+
+        // For a keyword "foo | bar", only one of the disjunct keywords must be included
+        var disjunctionGroups = subscription.IncludeKeywords
+            .Where(str => str.Contains("|"))
+            .Select(str => str
+                .Split("|")
+                .Select(keyword => keyword.Trim())
+                .ToList()
+            );
+
+        foreach (var group in disjunctionGroups)
+        {
+            var keywordsOfGroupInText = group.Where(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
+            if (!keywordsOfGroupInText.Any())
             {
-                Logger.Warning("Tried to parse ad which does not exist anymore");
+                Logger.Verbose($"Not a match because no keyword found from '{string.Join(" | ", group)}'");
                 return false;
             }
-
-            if (subscription.IncludeKeywords is null)
-            {
-                throw new InvalidOperationException("IncludeKeywords cannot be null");
-            }
-
-            if (subscription.ExcludeKeywords is null)
-            {
-                throw new InvalidOperationException("ExcludeKeywords cannot be null");
-            }
-
-            string title = ParseTitle(document);
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                Logger.Error(document.DocumentNode.InnerHtml);
-                throw new InvalidOperationException("Could not parse title");
-            }
-
-            string descriptionText = ParseDescriptionText(document);
-            if (string.IsNullOrWhiteSpace(descriptionText))
-            {
-                Logger.Error(document.DocumentNode.InnerHtml);
-                throw new InvalidOperationException("Could not parse description");
-            }
-
-            bool allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
-            bool excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(subscription, title + descriptionText);
-            return allIncludeKeywordsFound && !excludeKeywordsFound;
         }
 
-        private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
+        var allNonDisjunctiveKeywordsFound = subscription.IncludeKeywords
+            .Where(k => !k.Contains("|"))
+            .All(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
+
+        return allNonDisjunctiveKeywordsFound;
+    }
+
+    private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
+    {
+        if (subscription.ExcludeKeywords.Count == 0)
         {
-            if (subscription.IncludeKeywords.Count == 0)
-            {
-                return true;
-            }
-
-            // For a keyword "foo | bar", only one of the disjunct keywords must be included
-            List<List<string>> disjunctionGroups = subscription.IncludeKeywords
-                .Where(str => str.Contains("|"))
-                .Select(str => str
-                    .Split("|")
-                    .Select(keyword => keyword.Trim())
-                    .ToList()
-                )
-                .ToList();
-
-            foreach (List<string> group in disjunctionGroups)
-            {
-                bool anyOfGroupInText = group.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
-                if (!anyOfGroupInText)
-                {
-                    return false;
-                }
-            }
-
-            bool allNonDisjunctiveKeywordsFound = subscription.IncludeKeywords
-                .Where(k => !k.Contains("|"))
-                .All(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
-
-            return allNonDisjunctiveKeywordsFound;
+            return false;
         }
 
-        private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
-        {
-            if (subscription.ExcludeKeywords.Count == 0)
-            {
-                return false;
-            }
-
-            return subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
-        }
+        return subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
     }
 }

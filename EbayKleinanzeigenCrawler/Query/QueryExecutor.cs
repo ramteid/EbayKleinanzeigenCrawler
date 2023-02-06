@@ -1,139 +1,126 @@
 using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
 using System.Threading;
+using EbayKleinanzeigenCrawler.Interfaces;
 using HtmlAgilityPack;
 using Serilog;
-using EbayKleinanzeigenCrawler.Models;
-using System.Net.Http;
-using System.Linq;
-using EbayKleinanzeigenCrawler.Interfaces;
 
-namespace KleinanzeigenCrawler.Query
+namespace EbayKleinanzeigenCrawler.Query;
+
+public class QueryExecutor : IQueryExecutor
 {
-    public class QueryExecutor : IQueryExecutor
+    /// <summary>
+    /// This interval is used by EbayKleinanzeigen. They only allow 40 queries every 5 minutes. Above that, they obfuscate their HTML.
+    /// To make sure not to exceed this limit, it is hard-coded here.
+    /// </summary>
+    private TimeSpan _timeToWaitBetweenMaxAmountOfRequests;
+    private uint _allowedRequestsPerTimespan;
+
+    private readonly QueryCounter _queryCounter;
+    private readonly ILogger _logger;
+    private string _invalidHtml;
+
+    public QueryExecutor(ILogger logger, QueryCounter queryCounter)
     {
-        private readonly ConcurrentDictionary<Uri, (DateTime dateAdded, HtmlDocument html)> _uriCache = new();
-        private readonly QueryCounter _queryCounter;
-        private readonly ILogger _logger;
+        // TODO: persist cache?
+        _logger = logger;
+        _queryCounter = queryCounter;
+    }
 
-        public QueryExecutor(ILogger logger, QueryCounter queryCounter)
+    public void Initialize(TimeSpan timeToWaitBetweenMaxAmountOfRequests, uint allowedRequestsPerTimespan, string invalidHtml)
+    {
+        _timeToWaitBetweenMaxAmountOfRequests = timeToWaitBetweenMaxAmountOfRequests;
+        _allowedRequestsPerTimespan = allowedRequestsPerTimespan;
+        _invalidHtml = invalidHtml;
+    }
+
+    public bool GetHtml(Uri url, out HtmlDocument htmlDocument)
+    {
+        _logger.Information($"Loading URL: {url}");
+
+        try 
         {
-            // TODO: persist cache?
-            _logger = logger;
-            _queryCounter = queryCounter;
-        }
-
-        public bool GetHtml(Uri url, bool useCache, string invalidHtml, out HtmlDocument htmlDocument)
-        {
-            if (useCache && _uriCache.TryGetValue(url, out (DateTime, HtmlDocument) cachedValue))
+            // Allow retrying once after a 429/Retry-After response was found to avoid temporarily skipping an link
+            var firstTry = TryHttpRequest(url, out htmlDocument);
+            if (!firstTry)
             {
-                _logger.Information($"Loaded from Cache: {url}");
-                htmlDocument = cachedValue.Item2;
-                return true;
-            }
-
-            _logger.Information($"Loading URL: {url}");
-
-            try 
-            {
-                // Allow retrying once after a 429/Retry-After reponse was found to avoid temporarily skipping an link
-                var firstTry = TryHttpRequest(url, invalidHtml, out htmlDocument);
-                if (!firstTry)
-                {
-                    _logger.Debug("First try failed. Trying one more time.");
-                    var secondTry = TryHttpRequest(url, invalidHtml, out htmlDocument);
-                    if (!secondTry)
+                _logger.Debug("First try failed. Trying one more time.");
+                var secondTry = TryHttpRequest(url, out htmlDocument);
+                if (!secondTry)
                 {
                     return false;
                 }
             }
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e, $"HTTP request failed: {e.Message}");
-                htmlDocument = null;
-                return false;
-            }
-
-            (DateTime dateAdded, HtmlDocument html) newTuple = (DateTime.Now, htmlDocument);
-            _uriCache.AddOrUpdate(url, addValue: newTuple, updateValueFactory: (_, __) => newTuple);
-            return true;
         }
-
-        private bool TryHttpRequest(Uri url, string invalidHtml, out HtmlDocument htmlDocument)
+        catch (Exception e)
         {
-            _queryCounter.WaitForPermissionForQuery();
-            var handler = new HttpClientHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.All
-            };
-            var httpClient = new HttpClient(handler);
-            var response = httpClient.GetAsync(url).Result;
-            htmlDocument = new HtmlDocument();
-            var html = response.Content.ReadAsStringAsync().Result;
-            htmlDocument.LoadHtml(html);
-            return ValidateResponse(url, response, invalidHtml, html);
+            _logger.Error(e, $"HTTP request failed: {e.Message}");
+            htmlDocument = null;
+            return false;
         }
 
-        private bool ValidateResponse(Uri url, HttpResponseMessage response, string invalidHtml, string html)
+        return true;
+    }
+
+    private bool TryHttpRequest(Uri url, out HtmlDocument htmlDocument)
+    {
+        _queryCounter.WaitForAcquiringPermissionForQuery(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan);
+        var handler = new HttpClientHandler
         {
-            var retryAfterHeader = response.Headers.FirstOrDefault(h => h.Key == "Retry-After");
-            if (retryAfterHeader.Value is not null)
-            {
-                _logger.Warning($"Server responded with Retry-After header to indicate there are too many requests.");
-                if (int.TryParse(retryAfterHeader.Value.FirstOrDefault(), out var timeToWait))
-                {
-                    _logger.Information($"Waiting {timeToWait} seconds");
-                    Thread.Sleep(TimeSpan.FromSeconds(timeToWait));
-                    return false;
-                }
-                else
-                {
-                    _logger.Error("Found Retry-After header but no value for the time to wait. Waiting 30 seconds ...");
-                    Thread.Sleep(TimeSpan.FromSeconds(30));
-                    return false;
-                }
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || html.Contains("429 Too many requests"))
-            {
-                _logger.Warning($"Too many requests detected but no Retry-After header found. Waiting 30 seconds ...");
-                Thread.Sleep(TimeSpan.FromSeconds(30));
-                return false;
-            }
-            
-            if ((int)response.StatusCode >= 400)
-            {
-                _logger.Error($"Server responded with error code '{response.StatusCode}'");
-                return false;
-            }
+            AutomaticDecompression = System.Net.DecompressionMethods.All
+        };
+        var httpClient = new HttpClient(handler);
+        var response = httpClient.GetAsync(url).Result;
+        htmlDocument = new HtmlDocument();
+        var html = response.Content.ReadAsStringAsync().Result;
+        htmlDocument.LoadHtml(html);
+        return ValidateResponse(url, response, html);
+    }
 
-            if (html.StartsWith(invalidHtml))
-            {
-                _logger.Error($"Invalid HTML detected for {url}");
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Removes entries from the cache, which were already processed more than one day ago to reduce memory usage.
-        /// Hint: Inconsistency when multiple subscriptions contain the same URL.
-        /// </summary>
-        /// <param name="alreadyProcessedUrls">List of already processed URLs</param>
-        public void FreeCache(List<AlreadyProcessedUrl> alreadyProcessedUrls)
+    private bool ValidateResponse(Uri url, HttpResponseMessage response, string html)
+    {
+        var retryAfterHeader = response.Headers.FirstOrDefault(h => h.Key == "Retry-After");
+        // ReSharper disable once ConstantConditionalAccessQualifier
+        if (!string.IsNullOrWhiteSpace(retryAfterHeader.Value?.FirstOrDefault() ?? ""))
         {
-            foreach (var alreadyProcessedUrl in alreadyProcessedUrls)
+            _logger.Warning("Server responded with Retry-After header to indicate there are too many requests.");
+            if (int.TryParse(retryAfterHeader.Value.FirstOrDefault(), out var timeToWait))
             {
-                if (_uriCache.TryGetValue(alreadyProcessedUrl.Uri, out (DateTime dateAdded, HtmlDocument html) cachedEntry)) // TODO: check if it makes sense to remove an already processed URL from the cache immediately.
-                {
-                    if (cachedEntry.dateAdded < DateTime.Now - TimeSpan.FromDays(1))
-                    {
-                        _uriCache.Remove(alreadyProcessedUrl.Uri, out (DateTime dateAdded, HtmlDocument html) _);
-                    }
-                }
+                _logger.Information($"Waiting {timeToWait} seconds");
+                Thread.Sleep(TimeSpan.FromSeconds(timeToWait));
+                return false;
             }
+
+            _logger.Error("Found Retry-After header but no value for the time to wait. Waiting 30 seconds ...");
+            Thread.Sleep(TimeSpan.FromSeconds(30));
+            return false;
         }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || html.Contains("429 Too many requests"))
+        {
+            _logger.Warning("Too many requests detected but no Retry-After header found. Waiting 30 seconds ...");
+            Thread.Sleep(TimeSpan.FromSeconds(30));
+            return false;
+        }
+
+        if ((int)response.StatusCode >= 400)
+        {
+            _logger.Error($"Server responded with error code '{response.StatusCode}'");
+            return false;
+        }
+
+        if (html.StartsWith(_invalidHtml))
+        {
+            _logger.Error($"Invalid HTML detected for {url}");
+            return false;
+        }
+
+        return true;
+    }
+
+    public bool WaitUntilQueriesArePossibleAgain()
+    {
+        return _queryCounter.WaitForAcquiringPermissionForQuery(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan, acquire: false);
     }
 }

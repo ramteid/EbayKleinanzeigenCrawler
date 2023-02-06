@@ -1,14 +1,13 @@
 ﻿using System.Collections.Generic;
-using KleinanzeigenCrawler.Models;
+using EbayKleinanzeigenCrawler.Models;
 
-namespace KleinanzeigenCrawler.Interfaces
+namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface ISubscriptionPersistence
 {
-    public interface ISubscriptionPersistence
-    {
-        List<Subscription> GetEnabledSubscriptions();
-        void AddSubscriber(Subscriber subscriber);
-        Subscriber[] GetSubscribers();
-        bool RestoreData();
-        void SaveData();
-    }
+    List<Subscription> GetEnabledSubscriptions();
+    void AddSubscriber(Subscriber subscriber);
+    Subscriber[] GetSubscribers();
+    bool RestoreData();
+    void SaveData();
 }

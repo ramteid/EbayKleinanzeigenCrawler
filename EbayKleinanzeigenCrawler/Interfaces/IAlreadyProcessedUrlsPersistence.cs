@@ -2,12 +2,11 @@
 using System;
 using System.Collections.Generic;
 
-namespace EbayKleinanzeigenCrawler.Interfaces
+namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface IAlreadyProcessedUrlsPersistence
 {
-    public interface IAlreadyProcessedUrlsPersistence
-    {
-        List<AlreadyProcessedUrl> GetAlreadyProcessedLinksForSubscripition(Guid id);
-        void RestoreData();
-        void SaveData();
-    }
+    List<AlreadyProcessedUrl> GetAlreadyProcessedLinksForSubscription(Guid id);
+    void RestoreData();
+    void SaveData();
 }

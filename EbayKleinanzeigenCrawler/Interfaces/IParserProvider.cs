@@ -1,10 +1,8 @@
-﻿using KleinanzeigenCrawler.Interfaces;
-using KleinanzeigenCrawler.Models;
+﻿using EbayKleinanzeigenCrawler.Models;
 
-namespace EbayKleinanzeigenCrawler.Interfaces
+namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface IParserProvider
 {
-    public interface IParserProvider
-    {
-        IParser GetParser(Subscription subscription);
-    }
+    IParser GetParser(Subscription subscription);
 }

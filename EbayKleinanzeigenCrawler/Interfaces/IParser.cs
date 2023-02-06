@@ -1,15 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using KleinanzeigenCrawler.Models;
+using EbayKleinanzeigenCrawler.Models;
 using HtmlAgilityPack;
 
-namespace KleinanzeigenCrawler.Interfaces
+namespace EbayKleinanzeigenCrawler.Interfaces;
+
+public interface IParser
 {
-    public interface IParser
-    {
-        string InvalidHtml { get; }
-        List<Uri> GetAdditionalPages(HtmlDocument document);
-        IEnumerable<Result> ParseLinks(HtmlDocument document);
-        bool IsMatch(HtmlDocument document, Subscription subscription);
-    }
+    IQueryExecutor GetQueryExecutor();
+    List<Uri> GetAdditionalPages(HtmlDocument document);
+    IEnumerable<Result> ParseLinks(HtmlDocument document);
+    bool IsMatch(HtmlDocument document, Subscription subscription);
 }

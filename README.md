@@ -6,7 +6,7 @@
 * zypresse.com
 
 # Features:
-* Notifies you reliably about new articles within 5 minutes!
+* Notifies you reliably about new articles within 0-5 minutes!
 * Searches for keywords in title and description!
 * Specify which search keywords to include and which to exclude!
 * Specify a subscription by simply copying the URL from your browser
@@ -17,8 +17,8 @@
 
 # Before use:
 * Create your own Telegram Bot
+* Modify the `.env` file and set the environment variable `TELEGRAM_BOT_TOKEN` to your token.
 * If you you want to test it without Telegram, set the environment variable `NOTIFICATION_MANAGER` to `CONSOLE` to get notifications along with the logs on the console.
-* Modify the `.env` file and set the environment variable `TELEGRAM_BOT_TOKEN` to your token. 
 
 # How to use:
 * (After each change to the code) Build the app with `docker-compose build`
