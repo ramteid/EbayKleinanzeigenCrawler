@@ -6,4 +6,5 @@ namespace EbayKleinanzeigenCrawler.Interfaces;
 public interface IOutgoingNotifications
 {
     Task NotifySubscribers(Subscription subscription, Result newLink);
+    Task NotifyAdmins(string message);
 }

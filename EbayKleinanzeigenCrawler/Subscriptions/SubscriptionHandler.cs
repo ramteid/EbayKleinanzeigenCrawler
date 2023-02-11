@@ -4,6 +4,7 @@ using System.Linq;
 using Serilog;
 using EbayKleinanzeigenCrawler.Interfaces;
 using System.Threading;
+using System.Threading.Tasks;
 using EbayKleinanzeigenCrawler.Models;
 
 namespace EbayKleinanzeigenCrawler.Subscriptions;
@@ -26,56 +27,81 @@ public class SubscriptionHandler
         _alreadyProcessedUrlsPersistence = alreadyProcessedUrlsPersistence;
     }
 
-    public void ProcessAllSubscriptions()
+    public async Task ProcessAllSubscriptionsAsync()
     {
         _alreadyProcessedUrlsPersistence.RestoreData();
         while (true)
         {
             var subscriptions = _subscriptionPersistence.GetEnabledSubscriptions();
             _logger.Information($"Found {subscriptions.Count} enabled subscriptions");
-            foreach (var subscription in subscriptions)
-            {
-                _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
-                    
-                var alreadyProcessedUrls = _alreadyProcessedUrlsPersistence.GetAlreadyProcessedLinksForSubscription(subscription.Id);
-                ProcessSubscription(subscription, alreadyProcessedUrls);
-                    
-                _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
-                _alreadyProcessedUrlsPersistence.SaveData();
-            }
 
+            var subscriptionsGroupedByParser = subscriptions
+                .Select(subscription => (Parser: _parserProvider.GetParser(subscription), Subscription: subscription))
+                .GroupBy(subscriptionWithParser => subscriptionWithParser.Parser.GetType().Name)
+                .ToList();
+            
+            // Process multiple platforms asynchronously, while processing subscriptions within one platform sequentially to go easy on the API
+            var parserGroupedTasks = subscriptionsGroupedByParser
+                .Select(async subscriptionsForOneParser =>
+                {
+                    // This parserGroup contains all subscriptions for one platform, e. g. EbayKleinanzeigen
+                    await Task.Run(async () => {
+                        foreach (var subscriptionWithParser in subscriptionsForOneParser)
+                        {
+                            var subscription = subscriptionWithParser.Subscription;
+                            var parser = subscriptionWithParser.Parser;
+                            _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
+
+                            await ProcessSubscriptionAsync(subscription, parser);
+
+                            _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
+                            _alreadyProcessedUrlsPersistence.SaveData();
+                            _subscriptionPersistence.EnsureFirstRunCompletedAndSave(subscription);
+                        }
+                    });
+                });
+            await Task.WhenAll(parserGroupedTasks);
+            
             // Avoid flooding the API and the logs
             _logger.Information("Processed all subscriptions. Waiting to resume.");
             Thread.Sleep(TimeSpan.FromSeconds(60));
         }
     }
 
-    private void ProcessSubscription(Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks)
+    private async Task ProcessSubscriptionAsync(Subscription subscription, IParser parser)
     {
-        var firstRun = alreadyProcessedLinks.Count == 0;
-        var parser = _parserProvider.GetParser(subscription);
-
-        var newResults = GetNewLinks(parser, subscription.QueryUrl, alreadyProcessedLinks);
-
-        _logger.Information($"Analyzing {newResults.Count} new links, {alreadyProcessedLinks.Count} were already processed");
-
-        CheckForMatches(parser, subscription, alreadyProcessedLinks, newResults, firstRun);
+        var alreadyProcessedLinks = _alreadyProcessedUrlsPersistence.GetAlreadyProcessedLinksForSubscription(subscription.Id);
+        var newResults = await GetNewLinks(parser, subscription.QueryUrl, alreadyProcessedLinks);
+        foreach (var newResult in newResults)
+        {
+            if (subscription.FirstRunCompleted || subscription.InitialPull)
+            {
+                await CheckForMatchAsync(parser, subscription, newResult);
+            }
+            
+            alreadyProcessedLinks.Add(new AlreadyProcessedUrl
+            {
+                Uri = newResult.Link,
+                LastFound = DateTime.Now
+            });
+        }
     }
 
-    private List<Result> GetNewLinks(IParser parser, Uri firstPageUrl, List<AlreadyProcessedUrl> alreadyProcessedLinks)
+    private async Task<List<Result>> GetNewLinks(IParser parser, Uri firstPageUrl, List<AlreadyProcessedUrl> alreadyProcessedLinks)
     {
-        if (!parser.GetQueryExecutor().GetHtml(firstPageUrl, htmlDocument: out var firstPageHtml))
+        var firstPageHtml = await parser.QueryExecutor.GetHtml(firstPageUrl);
+        if (firstPageHtml is null)
         {
             return new List<Result>();
         }
 
+        var additionalPages = parser.GetAdditionalPages(firstPageHtml);  // TODO: Limit to n pages?
+        _logger.Debug($"{additionalPages.Count + 1} pages found");
+        
         // TODO: Only check additional pages, if it's the first run for the subscription OR the first run after application restart
-
-        var pages = parser.GetAdditionalPages(firstPageHtml);  // TODO: Limit to n pages?
-        pages = new List<Uri> { firstPageUrl }
-            .Concat(pages)
+        var pages = new List<Uri> { firstPageUrl }
+            .Concat(additionalPages)
             .ToList();
-        _logger.Debug($"{pages.Count} pages found");
 
         var newResults = new List<Result>();
 
@@ -83,12 +109,23 @@ public class SubscriptionHandler
         {
             var page = pages.ElementAt(i);
 
-            if (!parser.GetQueryExecutor().GetHtml(page, htmlDocument: out var htmlDocumentNextPage))
+            var htmlDocumentNextPage = await parser.QueryExecutor.GetHtml(page);
+            if (htmlDocumentNextPage is null)
             {
                 continue;
             }
 
-            var links = parser.ParseLinks(htmlDocumentNextPage).ToList();
+            List<Result> links;
+            try
+            {
+                links = parser.ParseLinks(htmlDocumentNextPage).ToList();
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "Error parsing links from page");
+                continue;
+            }
+
             UpdateAlreadyProcessedLinkLastFoundDate(alreadyProcessedLinks, links);
 
             var newLinks = links
@@ -96,9 +133,9 @@ public class SubscriptionHandler
                 .Reverse()  // Arrange the oldest entries at the beginning
                 .ToList();
 
-            _logger.Information($"Found {links.Count} links on page {i + 1}, there are {newLinks.Count} new links");
-
             newResults.AddRange(newLinks);
+
+            _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinks.Count}, old: {links.Count - newLinks.Count})");
         }
 
         return newResults;
@@ -116,47 +153,33 @@ public class SubscriptionHandler
         }
     }
 
-    private void CheckForMatches(IParser parser, Subscription subscription, List<AlreadyProcessedUrl> alreadyProcessedLinks, List<Result> newResults, bool firstRun)
+    private async Task CheckForMatchAsync(IParser parser, Subscription subscription, Result result)
     {
-        foreach (var result in newResults)
+        var htmlDocument = await parser.QueryExecutor.GetHtml(result.Link);
+        if (htmlDocument is null)
         {
-            if (!parser.GetQueryExecutor().GetHtml(result.Link, htmlDocument: out var htmlDocument))
-            {
-                continue;
-            }
-                
-            bool isMatch;
-            try
-            {
-                isMatch = parser.IsMatch(htmlDocument, subscription);
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e, "Skipping this link");
-                continue;
-            }
+            return;
+        }
+            
+        bool isMatch;
+        try
+        {
+            isMatch = parser.IsMatch(htmlDocument, subscription);
+        }
+        catch (Exception e)
+        {
+            _logger.Error(e, "Skipping this link");
+            return;
+        }
 
-            if (isMatch)
-            {
-                if (firstRun && !subscription.InitialPull)
-                {
-                    _logger.Debug($"Not notifying about match: {result.Link}");
-                    continue;
-                }
-
-                _logger.Information($"Found match: {result.Link}");
-                _outgoingNotifications.NotifySubscribers(subscription, result);
-            }
-            else
-            {
-                _logger.Debug($"No match: {result.Link}");
-            }
-
-            alreadyProcessedLinks.Add(new AlreadyProcessedUrl
-            {
-                Uri = result.Link,
-                LastFound = DateTime.Now
-            });
+        if (isMatch)
+        {
+            _logger.Information($"Found match: {result.Link}");
+            await _outgoingNotifications.NotifySubscribers(subscription, result);
+        }
+        else
+        {
+            _logger.Debug($"No match: {result.Link}");
         }
     }
 }

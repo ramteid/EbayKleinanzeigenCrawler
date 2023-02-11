@@ -8,7 +8,7 @@ namespace EbayKleinanzeigenCrawler.Persistence;
 
 public class JsonStorage : IDataStorage
 {
-    private readonly object _lockObject = new();
+    private static readonly object _lockObject = new();
     private readonly ILogger _logger;
 
     public JsonStorage(ILogger logger)

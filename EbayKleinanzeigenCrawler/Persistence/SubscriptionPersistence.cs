@@ -12,51 +12,43 @@ namespace EbayKleinanzeigenCrawler.Persistence;
 public class SubscriptionPersistence : ISubscriptionPersistence
 {
     private readonly ILogger _logger;
-    protected readonly IDataStorage DataStorage;
-    protected ConcurrentBag<Subscriber> SubscriberList { get; set; }
+    private readonly IDataStorage _dataStorage;
+    private ConcurrentBag<Subscriber> _subscriberList = new();
+    private static readonly object _lock = new();
 
     public SubscriptionPersistence(ILogger logger, IDataStorage dataStorage)
     {
-        Directory.CreateDirectory("data");
         _logger = logger;
-        DataStorage = dataStorage;
-        SubscriberList = new ConcurrentBag<Subscriber>();
+        _dataStorage = dataStorage;
+        Directory.CreateDirectory("data");
         RestoreData();
-    }
-
-    public void AddSubscriber(Subscriber subscriber)
-    {
-        SubscriberList.Add(subscriber);
-        SaveData();
-    }
-
-    public Subscriber[] GetSubscribers()
-    {
-        return SubscriberList.ToArray();
     }
 
     public bool RestoreData()
     {
-        try
+        lock(_lock)
         {
-            DataStorage.Load(Path.Join("data", "Subscribers.json"), out ConcurrentBag<Subscriber> data);
-            SubscriberList = data;
-            _logger.Information($"Restored data: {data.Count} Subscribers");
-        }
-        catch (Exception e)
-        {
-            SubscriberList ??= new ConcurrentBag<Subscriber>();
-
-            if (e is FileNotFoundException)
+            try
             {
-                _logger.Warning($"Could not restore subscribers: {e.Message}");
+                _dataStorage.Load(Path.Join("data", "Subscribers.json"), out ConcurrentBag<Subscriber> data);
+                _subscriberList = data;
+                _logger.Information($"Restored data: {data.Count} Subscribers");
             }
-            else
+            catch (Exception e)
             {
-                _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
-            }
+                _subscriberList ??= new ConcurrentBag<Subscriber>();
 
-            return false;
+                if (e is FileNotFoundException)
+                {
+                    _logger.Warning($"Could not restore subscribers: {e.Message}");
+                }
+                else
+                {
+                    _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
+                }
+
+                return false;
+            }
         }
 
         return true;
@@ -64,7 +56,27 @@ public class SubscriptionPersistence : ISubscriptionPersistence
 
     public void SaveData()
     {
-        DataStorage.Save(SubscriberList, Path.Join("data", "Subscribers.json"));
+        lock(_lock)
+        {            
+            _dataStorage.Save(_subscriberList, Path.Join("data", "Subscribers.json"));
+        }
+    }
+
+    public void AddSubscriber(Subscriber subscriber)
+    {
+        lock(_lock)
+        {
+            _subscriberList.Add(subscriber);
+            SaveData();
+        }
+    }
+
+    public Subscriber[] GetSubscribers()
+    {
+        lock(_lock)
+        {
+            return _subscriberList.ToArray();
+        }
     }
 
     public List<Subscription> GetEnabledSubscriptions()
@@ -73,5 +85,25 @@ public class SubscriptionPersistence : ISubscriptionPersistence
             .SelectMany(s => s.Subscriptions)
             .Where(s => s.Enabled)
             .ToList();
+    }
+
+    public void EnsureFirstRunCompletedAndSave(Subscription subscription)
+    {
+        if (subscription.FirstRunCompleted)
+        {
+            return;
+        }
+
+        lock(_lock)
+        {
+            // The supplied subscription was initially copied by .ToArray(), so modifying it won't modify the instance in _subscriberList
+            var subscriptionToModify = _subscriberList
+                .SelectMany(s => s.Subscriptions)
+                .SingleOrDefault(s => s.Id == subscription.Id)
+                ?? throw new InvalidOperationException($"Could not complete first run for subscription {subscription.Id}");
+            
+            subscriptionToModify.FirstRunCompleted = true;
+            SaveData();
+        }
     }
 }

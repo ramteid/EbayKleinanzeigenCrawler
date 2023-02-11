@@ -12,7 +12,7 @@ namespace EbayKleinanzeigenCrawler.Persistence;
 
 internal class AlreadyProcessedUrlsPersistence : IAlreadyProcessedUrlsPersistence
 {
-    private readonly object _lockObject = new();
+    private static readonly object _lockObject = new();
     private readonly ILogger _logger;
     private readonly IDataStorage _dataStorage;
     private ConcurrentDictionary<Guid, List<AlreadyProcessedUrl>> _alreadyProcessedUrlsPerSubscription;

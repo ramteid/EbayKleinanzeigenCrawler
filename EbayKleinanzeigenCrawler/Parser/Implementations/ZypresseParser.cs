@@ -10,11 +10,11 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations;
 public class ZypresseParser : ParserBase
 {
     private const string BaseUrl = "https://www.zypresse.com";
-    protected override TimeSpan TimeToWaitBetweenMaxAmountOfRequests => TimeSpan.FromSeconds(10);
-    protected override uint AllowedRequestsPerTimespan => 10;
+    protected override TimeSpan TimeToWaitBetweenMaxAmountOfRequests => TimeSpan.FromMinutes(5);
+    protected override uint AllowedRequestsPerTimespan => 40;
     protected override string InvalidHtml => "<html><head><meta charset=\"utf-8\"><script>";
 
-    public ZypresseParser(ILogger logger, IQueryExecutor queryExecutor) : base(logger, queryExecutor) { }
+    public ZypresseParser(ILogger logger, IQueryExecutor queryExecutor, IErrorStatistics errorStatistics) : base(logger, queryExecutor, errorStatistics) { }
 
     public override List<Uri> GetAdditionalPages(HtmlDocument document)
     {
@@ -64,11 +64,6 @@ public class ZypresseParser : ParserBase
             .Where(l => l is not null)
             .Select(l => new Uri($"{BaseUrl}{l.Value}"))
             .SingleOrDefault();
-
-        if (link is null)
-        {
-            throw new Exception("Could not parse link");
-        }
 
         return link;
     }

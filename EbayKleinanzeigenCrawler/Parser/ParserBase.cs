@@ -13,11 +13,15 @@ public abstract class ParserBase : IParser
 {
     protected readonly ILogger Logger;
     private readonly IQueryExecutor _queryExecutor;
-    
-    protected ParserBase(ILogger logger, IQueryExecutor queryExecutor)
+    private readonly IErrorStatistics _errorStatistics;
+
+    public IQueryExecutor QueryExecutor => _queryExecutor;
+
+    protected ParserBase(ILogger logger, IQueryExecutor queryExecutor, IErrorStatistics errorStatistics)
     {
         Logger = logger;
         _queryExecutor = queryExecutor;
+        _errorStatistics = errorStatistics;
         _queryExecutor.Initialize(
             timeToWaitBetweenMaxAmountOfRequests: TimeToWaitBetweenMaxAmountOfRequests, 
             allowedRequestsPerTimespan: AllowedRequestsPerTimespan,
@@ -48,11 +52,6 @@ public abstract class ParserBase : IParser
 
     protected abstract string ParseDescriptionText(HtmlDocument document);
 
-    public IQueryExecutor GetQueryExecutor()
-    {
-        return _queryExecutor;
-    }
-
     public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
     {
         if (!EnsureValidHtml(resultPage))
@@ -62,7 +61,6 @@ public abstract class ParserBase : IParser
         }
         
         var results = ParseResults(resultPage);
-
         if (results is null)
         {
             // When no results are found
@@ -76,10 +74,30 @@ public abstract class ParserBase : IParser
                 continue;
             }
 
-            // Validation must happen in the implementations
             var link = ParseResultLink(result);
+            if (link is null)
+            {
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
+                Logger.Error("Could not parse link");
+                yield break;
+            }
+
             var date = ParseResultDate(result);
+            if (date is null)
+            {
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
+                Logger.Error("Could not parse date");
+                yield break;
+            }
+
             var price = ParseResultPrice(result);
+            if (price is null)
+            {
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
+                Logger.Error("Could not parse price");
+                yield break;
+            }
+
             yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
         }
     }
@@ -92,20 +110,11 @@ public abstract class ParserBase : IParser
             return false;
         }
 
-        if (subscription.IncludeKeywords is null)
-        {
-            throw new InvalidOperationException("IncludeKeywords cannot be null");
-        }
-
-        if (subscription.ExcludeKeywords is null)
-        {
-            throw new InvalidOperationException("ExcludeKeywords cannot be null");
-        }
-
         var title = ParseTitle(document);
         if (string.IsNullOrWhiteSpace(title))
         {
             Logger.Error(document.DocumentNode.InnerHtml);
+            _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             throw new InvalidOperationException("Could not parse title");
         }
 
@@ -113,6 +122,7 @@ public abstract class ParserBase : IParser
         if (string.IsNullOrWhiteSpace(descriptionText))
         {
             Logger.Error(document.DocumentNode.InnerHtml);
+            _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
             throw new InvalidOperationException("Could not parse description");
         }
 
@@ -123,6 +133,11 @@ public abstract class ParserBase : IParser
 
     private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
     {
+        if (subscription.IncludeKeywords is null)
+        {
+            throw new InvalidOperationException("IncludeKeywords cannot be null");
+        }
+
         if (subscription.IncludeKeywords.Count == 0)
         {
             return true;
@@ -156,6 +171,11 @@ public abstract class ParserBase : IParser
 
     private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
     {
+        if (subscription.ExcludeKeywords is null)
+        {
+            throw new InvalidOperationException("ExcludeKeywords cannot be null");
+        }
+
         if (subscription.ExcludeKeywords.Count == 0)
         {
             return false;
