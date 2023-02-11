@@ -5,9 +5,10 @@ namespace EbayKleinanzeigenCrawler.Interfaces;
 
 public interface ISubscriptionPersistence
 {
+    bool RestoreData();
+    void SaveData();
     List<Subscription> GetEnabledSubscriptions();
     void AddSubscriber(Subscriber subscriber);
     Subscriber[] GetSubscribers();
-    bool RestoreData();
-    void SaveData();
+    void EnsureFirstRunCompletedAndSave(Subscription subscriptionId);
 }

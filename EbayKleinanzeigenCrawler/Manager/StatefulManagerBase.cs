@@ -33,7 +33,11 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             subscriber = subscribers.SingleOrDefault(s => s.Id.Equals(clientId));
             if (subscriber is null)
             {
-                subscriber = new Subscriber { Id = clientId };
+                subscriber = new Subscriber 
+                {
+                    Id = clientId,
+                    IsAdmin = false  // admin propery has to be set manually in Subscribers.json
+                };
                 _subscriptionPersistence.AddSubscriber(subscriber);
             }
 
@@ -43,7 +47,7 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
         {
             if (subscriber is not null)
             {
-                await SendMessage(subscriber, $"Error: {exception.Message}"); // TODO: Handle Exceptions from SendMessage()?
+                await SendMessage(subscriber, $"Error: {exception.Message}");
             }
             else
             {
@@ -54,24 +58,38 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 
     public async Task NotifySubscribers(Subscription subscription, Result newResult)
     {
-        // TODO: Bug: When there are two equal subscriptions with only one having initial results enabled, also the other subscription with initial=false will get the initial results
-
         var subscribers = _subscriptionPersistence.GetSubscribers()
-            .Where(s => s.Subscriptions.Contains(subscription)).ToList();
+            .Where(s => s.Subscriptions.Select(s => s.Id).Any(s => s.Equals(subscription.Id)))
+            .ToList();
 
         if (subscribers.Count == 0)
         {
             Logger.Error($"Attempted to notify subscribers but found none for subscription {subscription.Id}");
+            return;
         }
 
-        foreach (var subscriber in subscribers)
+        if (subscribers.Count > 1)
         {
-            // As it is possible that multiple subscribers have the same subscription, this subscription could be an equal one from another subscriber
-            var exactSubscription = subscriber.Subscriptions.Single(s => s.Equals(subscription) && s.Enabled);
+            Logger.Error($"Attempted to notify subscribers but found more than one ({subscribers.Count}) for subscription {subscription.Id}. Notifying only the first one.");
+        }
+        var subscriber = subscribers.FirstOrDefault();
 
-            var message = $"New result: {newResult.Link} \n" +
-                          $"{exactSubscription.Title} - {newResult.CreationDate} - {newResult.Price}";   // TODO: Amend Title of already sent notification to avoid duplicate notifications for two subscriptions
-            await SendMessage(subscriber, message);
+
+        var message = $"New result: {newResult.Link} \n" +
+                      $"{subscription.Title} - {newResult.CreationDate} - {newResult.Price}";
+        await SendMessage(subscriber, message);
+    }
+
+    public async Task NotifyAdmins(string message)
+    {
+        var admins = _subscriptionPersistence
+            .GetSubscribers()
+            .Where(s => s.IsAdmin)
+            .ToList();
+
+        foreach (var admin in admins)
+        {
+            await SendMessage(admin, message);
         }
     }
 
@@ -149,7 +167,7 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
                 await AnalyzeInputExcludeKeywords(messageText, subscriber);
                 return;
             }
-            case InputState.WaitingForInitialPull: // TODO: Add answer buttons
+            case InputState.WaitingForInitialPull:
             {
                 await AnalyzeInputInitialPull(messageText, subscriber);
                 return;

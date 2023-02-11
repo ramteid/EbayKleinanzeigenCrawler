@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Threading.Tasks;
+using EbayKleinanzeigenCrawler.ErrorHandling;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Manager;
 using EbayKleinanzeigenCrawler.Parser;
@@ -14,7 +16,7 @@ namespace EbayKleinanzeigenCrawler;
 
 public class Program
 {
-    private static void Main(string[] _)
+    private static async Task Main(string[] _)
     {
         DotNetEnv.Env.Load();
         var serviceCollection = ConfigureServices();
@@ -24,7 +26,7 @@ public class Program
 
         try
         {
-            handler!.ProcessAllSubscriptions();
+            await handler!.ProcessAllSubscriptionsAsync();
         }
         catch (Exception e)
         {
@@ -50,6 +52,7 @@ public class Program
         serviceCollection.AddSingleton(SelectNotificationManager());
         serviceCollection.AddSingleton<ISubscriptionPersistence, SubscriptionPersistence>();
         serviceCollection.AddSingleton<IAlreadyProcessedUrlsPersistence, AlreadyProcessedUrlsPersistence>();
+        serviceCollection.AddSingleton<IErrorStatistics, ErrorStatistics>();
 
         serviceCollection.AddSingleton<ILogger>(_ => new LoggerConfiguration()
             .MinimumLevel.Information()
