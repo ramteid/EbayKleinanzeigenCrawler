@@ -20,7 +20,7 @@ public class QueryCounter
     public bool WaitForAcquiringPermissionForQuery(TimeSpan timeToWaitBetweenMaxAmountOfRequests, uint allowedRequestsPerTimespan, bool acquire)
     {
         // Randomize the time a little between the requests to hopefully counteract bot detection
-        Thread.Sleep(TimeSpan.FromMilliseconds(_random.Next(0, 1000)));
+        Thread.Sleep(TimeSpan.FromMilliseconds(_random.Next(500, 3000)));
 
         var queryWaitTimeout = TimeSpan.FromMinutes(10);
         var sleepTime = TimeSpan.FromSeconds(10);
