@@ -29,7 +29,8 @@ internal class AlreadyProcessedUrlsPersistence : IAlreadyProcessedUrlsPersistenc
     {
         lock(_lockObject)
         {
-            return _alreadyProcessedUrlsPerSubscription.GetOrAdd(subscriptionId, valueFactory: _ => new List<AlreadyProcessedUrl>());
+            return _alreadyProcessedUrlsPerSubscription
+                .GetOrAdd(subscriptionId, valueFactory: _ => new List<AlreadyProcessedUrl>());
         }
     }
 
@@ -113,6 +114,11 @@ internal class AlreadyProcessedUrlsPersistence : IAlreadyProcessedUrlsPersistenc
                     {
                         urls.Remove(url);
                     }
+                }
+                
+                if (!urls.Any())
+                {
+                    _alreadyProcessedUrlsPerSubscription.Remove(element.Key, out _);
                 }
             }
 
