@@ -86,7 +86,7 @@ public class TelegramManager : StatefulManagerBase
             disableWebPagePreview: !enablePreview
         );
 
-        Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");  // TODO: Add Admin-Notifications, e.g. for accumulated parsing failures
+        Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");
     }
 
     protected override async Task DisplaySubscriptionList(Subscriber subscriber)
