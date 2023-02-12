@@ -52,7 +52,16 @@ public class SubscriptionHandler
                             var parser = subscriptionWithParser.Parser;
                             _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
 
-                            await ProcessSubscriptionAsync(subscription, parser);
+                            try
+                            {
+                                await ProcessSubscriptionAsync(subscription, parser);
+                            }
+                            catch (Exception e)
+                            {
+                                _logger.Error(e, $"Cancelled processing subscription '{subscription.Title}' {subscription.Id}");
+                                _alreadyProcessedUrlsPersistence.SaveData();
+                                continue;
+                            }
 
                             _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
                             _alreadyProcessedUrlsPersistence.SaveData();

@@ -64,17 +64,15 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 
         if (subscribers.Count == 0)
         {
-            Logger.Error($"Attempted to notify subscribers but found none for subscription {subscription.Id}");
-            return;
+            throw new InvalidOperationException($"Attempted to notify subscribers but found none for subscription {subscription.Id}");
         }
 
         if (subscribers.Count > 1)
         {
             Logger.Error($"Attempted to notify subscribers but found more than one ({subscribers.Count}) for subscription {subscription.Id}. Notifying only the first one.");
         }
+
         var subscriber = subscribers.FirstOrDefault();
-
-
         var message = $"New result: {newResult.Link} \n" +
                       $"{subscription.Title} - {newResult.CreationDate} - {newResult.Price}";
         await SendMessage(subscriber, message);

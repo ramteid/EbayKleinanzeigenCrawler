@@ -36,8 +36,6 @@ public class SubscriptionPersistence : ISubscriptionPersistence
             }
             catch (Exception e)
             {
-                _subscriberList ??= new ConcurrentBag<Subscriber>();
-
                 if (e is FileNotFoundException)
                 {
                     _logger.Warning($"Could not restore subscribers: {e.Message}");
@@ -47,6 +45,7 @@ public class SubscriptionPersistence : ISubscriptionPersistence
                     _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
                 }
 
+                _subscriberList ??= new ConcurrentBag<Subscriber>();
                 return false;
             }
         }
@@ -99,8 +98,14 @@ public class SubscriptionPersistence : ISubscriptionPersistence
             // The supplied subscription was initially copied by .ToArray(), so modifying it won't modify the instance in _subscriberList
             var subscriptionToModify = _subscriberList
                 .SelectMany(s => s.Subscriptions)
-                .SingleOrDefault(s => s.Id == subscription.Id)
-                ?? throw new InvalidOperationException($"Could not complete first run for subscription {subscription.Id}");
+                .SingleOrDefault(s => s.Id == subscription.Id);
+
+            if (subscriptionToModify is null)
+            {
+                // Subscription may have been deleted
+                _logger.Error($"Cannot complete first run for subscription {subscription.Id} as the subscription was not found");
+                return;
+            }
             
             subscriptionToModify.FirstRunCompleted = true;
             SaveData();
