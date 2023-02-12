@@ -82,8 +82,7 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
     {
         var admins = _subscriptionPersistence
             .GetSubscribers()
-            .Where(s => s.IsAdmin)
-            .ToList();
+            .Where(s => s.IsAdmin);
 
         foreach (var admin in admins)
         {
