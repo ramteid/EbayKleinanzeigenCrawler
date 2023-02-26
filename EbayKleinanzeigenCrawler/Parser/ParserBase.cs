@@ -85,23 +85,10 @@ public abstract class ParserBase : IParser
                 yield break;
             }
 
+            // For some ads on some platforms it is normal not to have a date or price displayed.
+            // Handle these cases gracefully and threat date and price as optional.
             var date = ParseResultDate(result);
-            if (string.IsNullOrWhiteSpace(date))
-            {
-                Logger.Error("Could not parse date");
-                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"date_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
-            }
-
             var price = ParseResultPrice(result);
-            if (string.IsNullOrWhiteSpace(price))
-            {
-                Logger.Error("Could not parse price");
-                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"price_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
-            }
 
             yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
         }
@@ -109,12 +96,6 @@ public abstract class ParserBase : IParser
 
     public virtual bool IsMatch(HtmlDocument document, Subscription subscription)
     {
-        if (document.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
-        {
-            Logger.Warning("Tried to parse ad which does not exist anymore");
-            return false;
-        }
-
         var title = ParseTitle(document);
         if (string.IsNullOrWhiteSpace(title))
         {

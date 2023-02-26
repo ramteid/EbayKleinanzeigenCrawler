@@ -115,6 +115,12 @@ public class EbayKleinanzeigenParser : ParserBase
 
     protected override string ParseTitle(HtmlDocument document)
     {
+        if (document.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        {
+            Logger.Warning("Tried to parse ad which does not exist anymore");
+            return null;
+        }
+
         return document.DocumentNode
             .Descendants("h1")
             .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-title"))?
