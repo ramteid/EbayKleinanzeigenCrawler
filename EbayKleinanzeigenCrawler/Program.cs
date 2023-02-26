@@ -45,6 +45,7 @@ public class Program
         serviceCollection.AddTransient<SubscriptionHandler>();
         serviceCollection.AddTransient<IDataStorage, JsonStorage>();
         serviceCollection.AddTransient<IParser, ZypresseParser>();
+        serviceCollection.AddTransient<IUserAgentProvider, UserAgentProvider>();
 
         serviceCollection.AddSingleton<IParserProvider, ParserProvider>();
         serviceCollection.AddSingleton<TelegramManager>();

@@ -17,14 +17,16 @@ public class QueryExecutor : IQueryExecutor
 
     private readonly QueryCounter _queryCounter;
     private readonly IErrorStatistics _errorStatistics;
+    private readonly IUserAgentProvider _userAgentProvider;
     private readonly ILogger _logger;
     private string _invalidHtml;
 
-    public QueryExecutor(ILogger logger, QueryCounter queryCounter, IErrorStatistics errorStatistics)
+    public QueryExecutor(ILogger logger, QueryCounter queryCounter, IErrorStatistics errorStatistics, IUserAgentProvider userAgentProvider)
     {
         _logger = logger;
         _queryCounter = queryCounter;
         _errorStatistics = errorStatistics;
+        _userAgentProvider = userAgentProvider;
     }
 
     public void Initialize(TimeSpan timeToWaitBetweenMaxAmountOfRequests, uint allowedRequestsPerTimespan, string invalidHtml)
@@ -72,12 +74,16 @@ public class QueryExecutor : IQueryExecutor
     private async Task<HtmlDocument> TryHttpRequest(Uri url)
     {
         _queryCounter.WaitForAcquiringPermissionForQuery(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan, acquire: true);
-        var handler = new HttpClientHandler
+        var httpClient = new HttpClient(new HttpClientHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All
-        };
-        var httpClient = new HttpClient(handler);
-        var response = await httpClient.GetAsync(url);
+        });
+
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+        var userAgent = _userAgentProvider.GetRandomUserAgent();
+        requestMessage.Headers.Add("user-agent", userAgent);
+        var response = await httpClient.SendAsync(requestMessage);
+
         var htmlDocument = new HtmlDocument();
         var html = await response.Content.ReadAsStringAsync();
         htmlDocument.LoadHtml(html);
@@ -87,7 +93,7 @@ public class QueryExecutor : IQueryExecutor
         }
         else
         {
-            _logger.Warning(html);
+            _logger.Warning(html.ReplaceLineEndings(""));
             return null;
         }
     }
