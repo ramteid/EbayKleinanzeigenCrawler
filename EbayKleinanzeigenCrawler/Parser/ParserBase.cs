@@ -78,7 +78,7 @@ public abstract class ParserBase : IParser
             if (link is null)
             {
                 Logger.Error("Could not parse link");
-                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
                 yield break;
             }
@@ -87,7 +87,7 @@ public abstract class ParserBase : IParser
             if (string.IsNullOrWhiteSpace(date))
             {
                 Logger.Error("Could not parse date");
-                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
                 yield break;
             }
@@ -96,7 +96,7 @@ public abstract class ParserBase : IParser
             if (string.IsNullOrWhiteSpace(price))
             {
                 Logger.Error("Could not parse price");
-                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
                 yield break;
             }
@@ -107,7 +107,7 @@ public abstract class ParserBase : IParser
 
     public virtual bool IsMatch(HtmlDocument document, Subscription subscription)
     {
-        if (document.DocumentNode.InnerHtml.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        if (document.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
         {
             Logger.Warning("Tried to parse ad which does not exist anymore");
             return false;
@@ -117,7 +117,7 @@ public abstract class ParserBase : IParser
         if (string.IsNullOrWhiteSpace(title))
         {
             Logger.Error("Could not parse title");
-            Logger.Error(document.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+            Logger.Error(document.Text.ReplaceLineEndings(""));
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             return false;
         }
@@ -126,7 +126,7 @@ public abstract class ParserBase : IParser
         if (string.IsNullOrWhiteSpace(descriptionText))
         {
             Logger.Error("Could not parse description");
-            Logger.Error(document.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+            Logger.Error(document.Text.ReplaceLineEndings(""));
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
             return false;
         }
