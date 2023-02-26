@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
@@ -78,7 +79,8 @@ public abstract class ParserBase : IParser
             if (link is null)
             {
                 Logger.Error("Could not parse link");
-                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                File.WriteAllText(Path.Join("data", $"parseLink_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
                 yield break;
             }
@@ -87,7 +89,8 @@ public abstract class ParserBase : IParser
             if (string.IsNullOrWhiteSpace(date))
             {
                 Logger.Error("Could not parse date");
-                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                File.WriteAllText(Path.Join("data", $"date_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
                 yield break;
             }
@@ -96,7 +99,8 @@ public abstract class ParserBase : IParser
             if (string.IsNullOrWhiteSpace(price))
             {
                 Logger.Error("Could not parse price");
-                Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                File.WriteAllText(Path.Join("data", $"price_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
                 yield break;
             }
@@ -117,7 +121,8 @@ public abstract class ParserBase : IParser
         if (string.IsNullOrWhiteSpace(title))
         {
             Logger.Error("Could not parse title");
-            Logger.Error(document.Text.ReplaceLineEndings(""));
+            // Logger.Error(document.Text.ReplaceLineEndings(""));
+            File.WriteAllText(Path.Join("data", $"title_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), document.Text);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             return false;
         }
@@ -126,7 +131,8 @@ public abstract class ParserBase : IParser
         if (string.IsNullOrWhiteSpace(descriptionText))
         {
             Logger.Error("Could not parse description");
-            Logger.Error(document.Text.ReplaceLineEndings(""));
+            // Logger.Error(document.Text.ReplaceLineEndings(""));
+            File.WriteAllText(Path.Join("data", $"descr_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), document.Text);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
             return false;
         }
