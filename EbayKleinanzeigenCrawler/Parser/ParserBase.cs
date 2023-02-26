@@ -77,24 +77,27 @@ public abstract class ParserBase : IParser
             var link = ParseResultLink(result);
             if (link is null)
             {
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
                 Logger.Error("Could not parse link");
+                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
                 yield break;
             }
 
             var date = ParseResultDate(result);
             if (date is null)
             {
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
                 Logger.Error("Could not parse date");
+                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
                 yield break;
             }
 
             var price = ParseResultPrice(result);
             if (price is null)
             {
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
                 Logger.Error("Could not parse price");
+                Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
                 yield break;
             }
 
@@ -113,17 +116,19 @@ public abstract class ParserBase : IParser
         var title = ParseTitle(document);
         if (string.IsNullOrWhiteSpace(title))
         {
-            Logger.Error(document.DocumentNode.InnerHtml);
+            Logger.Error("Could not parse title");
+            Logger.Error(document.DocumentNode.InnerHtml.ReplaceLineEndings(""));
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
-            throw new InvalidOperationException("Could not parse title");
+            return false;
         }
 
         var descriptionText = ParseDescriptionText(document);
         if (string.IsNullOrWhiteSpace(descriptionText))
         {
-            Logger.Error(document.DocumentNode.InnerHtml);
+            Logger.Error("Could not parse description");
+            Logger.Error(document.DocumentNode.InnerHtml.ReplaceLineEndings(""));
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
-            throw new InvalidOperationException("Could not parse description");
+            return false;
         }
 
         var allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
