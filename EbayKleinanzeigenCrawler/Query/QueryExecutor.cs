@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -93,7 +94,8 @@ public class QueryExecutor : IQueryExecutor
         }
         else
         {
-            _logger.Warning(html.ReplaceLineEndings(""));
+            // _logger.Warning(html.ReplaceLineEndings(""));
+            File.WriteAllText(Path.Join("data", $"validateResponse_{Guid.NewGuid().ToString()}"), html);
             return null;
         }
     }

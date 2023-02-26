@@ -6,6 +6,7 @@ using EbayKleinanzeigenCrawler.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 using EbayKleinanzeigenCrawler.Models;
+using System.IO;
 
 namespace EbayKleinanzeigenCrawler.Subscriptions;
 
@@ -150,7 +151,8 @@ public class SubscriptionHandler
             if (links.Count == 0)
             {
                 _logger.Error($"Found no links on page {i + 1}, which is considered an error");
-                _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
+                // _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
+                File.WriteAllText(Path.Join("data", $"results_{parser.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), pageHtml.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             }
             else
