@@ -17,16 +17,6 @@ public class UserAgentProvider : IUserAgentProvider
 
     private static readonly List<string> UserAgents = new()
     {
-        "Mozilla/5.0 (Android 11; Mobile; rv:85.0) Gecko/85.0 Firefox/85.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:86.0) Gecko/86.0 Firefox/86.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:87.0) Gecko/87.0 Firefox/87.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:88.0) Gecko/88.0 Firefox/88.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:92.0) Gecko/92.0 Firefox/92.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:93.0) Gecko/93.0 Firefox/93.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:94.0) Gecko/94.0 Firefox/94.0",
-        "Mozilla/5.0 (Android 11; Mobile; rv:95.0) Gecko/95.0 Firefox/95.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 11.6; rv:85.0) Gecko/20100101 Firefox/85.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 11.6; rv:86.0) Gecko/20100101 Firefox/86.0",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 11.6; rv:87.0) Gecko/20100101 Firefox/87.0",

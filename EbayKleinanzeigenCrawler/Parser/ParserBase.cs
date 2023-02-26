@@ -80,7 +80,7 @@ public abstract class ParserBase : IParser
             {
                 Logger.Error("Could not parse link");
                 // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"parseLink_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
+                File.WriteAllText(Path.Join("data", $"parseLink_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
                 yield break;
             }
@@ -90,9 +90,8 @@ public abstract class ParserBase : IParser
             {
                 Logger.Error("Could not parse date");
                 // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"date_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
+                File.WriteAllText(Path.Join("data", $"date_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDate);
-                yield break;
             }
 
             var price = ParseResultPrice(result);
@@ -100,9 +99,8 @@ public abstract class ParserBase : IParser
             {
                 Logger.Error("Could not parse price");
                 // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"price_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), resultPage.Text);
+                File.WriteAllText(Path.Join("data", $"price_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParsePrice);
-                yield break;
             }
 
             yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
@@ -122,7 +120,7 @@ public abstract class ParserBase : IParser
         {
             Logger.Error("Could not parse title");
             // Logger.Error(document.Text.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"title_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), document.Text);
+            File.WriteAllText(Path.Join("data", $"title_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             return false;
         }
@@ -132,7 +130,7 @@ public abstract class ParserBase : IParser
         {
             Logger.Error("Could not parse description");
             // Logger.Error(document.Text.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"descr_{this.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), document.Text);
+            File.WriteAllText(Path.Join("data", $"descr_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
             return false;
         }

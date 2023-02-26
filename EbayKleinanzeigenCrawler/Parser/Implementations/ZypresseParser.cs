@@ -80,7 +80,7 @@ public class ZypresseParser : ParserBase
     protected override string ParseResultPrice(HtmlNode result)
     {
         // Zypresse doesn't show a price on the result list page
-        return "";
+        return "-";
     }
 
     protected override string ParseTitle(HtmlDocument document)

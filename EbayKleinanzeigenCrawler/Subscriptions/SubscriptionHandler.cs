@@ -152,7 +152,7 @@ public class SubscriptionHandler
             {
                 _logger.Error($"Found no links on page {i + 1}, which is considered an error");
                 // _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"results_{parser.GetType().Name[0]}_{Guid.NewGuid().ToString()}"), pageHtml.Text);
+                File.WriteAllText(Path.Join("data", $"links_{parser.GetType().Name[0]}_{Guid.NewGuid()}"), pageHtml.Text);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             }
             else
