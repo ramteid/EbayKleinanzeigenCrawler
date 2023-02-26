@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using EbayKleinanzeigenCrawler.ErrorHandling;
@@ -95,7 +96,9 @@ public class QueryExecutor : IQueryExecutor
         else
         {
             // _logger.Warning(html.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"validateResponse_{Guid.NewGuid()}"), html);
+            var guid = Guid.NewGuid();
+            File.WriteAllText(Path.Join("data", $"validateResponse_html_{guid}"), html);
+            File.WriteAllText(Path.Join("data", $"validateResponse_json_{guid}"), JsonSerializer.Serialize(response));
             return null;
         }
     }
