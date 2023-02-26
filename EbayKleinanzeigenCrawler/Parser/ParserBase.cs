@@ -84,7 +84,7 @@ public abstract class ParserBase : IParser
             }
 
             var date = ParseResultDate(result);
-            if (date is null)
+            if (string.IsNullOrWhiteSpace(date))
             {
                 Logger.Error("Could not parse date");
                 Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));
@@ -93,7 +93,7 @@ public abstract class ParserBase : IParser
             }
 
             var price = ParseResultPrice(result);
-            if (price is null)
+            if (string.IsNullOrWhiteSpace(price))
             {
                 Logger.Error("Could not parse price");
                 Logger.Error(resultPage.DocumentNode.InnerHtml.ReplaceLineEndings(""));

@@ -75,12 +75,6 @@ public class ZypresseParser : ParserBase
             .Select(d => d.InnerText)
             .SingleOrDefault()?
             .Trim();
-
-        if (string.IsNullOrWhiteSpace(date))
-        {
-            Logger.Error("Could not parse date");
-        }
-
         return date;
     }
 
