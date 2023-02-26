@@ -100,13 +100,6 @@ public class EbayKleinanzeigenParser : ParserBase
             .Select(d => d.InnerText)
             .SingleOrDefault()?
             .Trim();
-
-        if (string.IsNullOrWhiteSpace(date))
-        {
-            Logger.Debug(result.InnerHtml);
-            Logger.Warning("Could not parse date");
-        }
-
         return date;
     }
 
@@ -117,13 +110,6 @@ public class EbayKleinanzeigenParser : ParserBase
             .Select(d => d.InnerText)
             .SingleOrDefault()?
             .Trim();
-
-        if (string.IsNullOrWhiteSpace(price))
-        {
-            Logger.Debug(result.InnerHtml);
-            Logger.Warning("Could not parse price");
-        }
-
         return price;
     }
 

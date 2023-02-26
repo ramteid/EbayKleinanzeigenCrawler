@@ -118,8 +118,8 @@ public class SubscriptionHandler
         {
             var page = pages.ElementAt(i);
 
-            var htmlDocumentNextPage = await parser.QueryExecutor.GetHtml(page);
-            if (htmlDocumentNextPage is null)
+            var pageHtml = await parser.QueryExecutor.GetHtml(page);
+            if (pageHtml is null)
             {
                 continue;
             }
@@ -127,7 +127,7 @@ public class SubscriptionHandler
             List<Result> links;
             try
             {
-                links = parser.ParseLinks(htmlDocumentNextPage).ToList();
+                links = parser.ParseLinks(pageHtml).ToList();
             }
             catch (Exception e)
             {
@@ -144,7 +144,15 @@ public class SubscriptionHandler
 
             newResults.AddRange(newLinks);
 
-            _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinks.Count}, old: {links.Count - newLinks.Count})");
+            if (links.Count == 0)
+            {
+                _logger.Error($"Found no links on page {i + 1}, which is considered an error");
+                _logger.Error(pageHtml.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+            }
+            else
+            {
+                _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinks.Count}, old: {links.Count - newLinks.Count})");
+            }
         }
 
         return newResults;
