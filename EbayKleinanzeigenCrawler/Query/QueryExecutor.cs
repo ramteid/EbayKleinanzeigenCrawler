@@ -95,7 +95,7 @@ public class QueryExecutor : IQueryExecutor
         else
         {
             // _logger.Warning(html.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"validateResponse_{Guid.NewGuid().ToString()}"), html);
+            File.WriteAllText(Path.Join("data", $"validateResponse_{Guid.NewGuid()}"), html);
             return null;
         }
     }
