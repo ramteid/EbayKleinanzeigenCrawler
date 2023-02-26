@@ -32,7 +32,7 @@ public class ZypresseParser : ParserBase
 
     protected override bool EnsureValidHtml(HtmlDocument resultPage)
     {
-        if (!resultPage.DocumentNode.InnerHtml.Contains("listAdlistAd"))
+        if (!resultPage.Text.Contains("listAdlistAd"))
         {
             Logger.Warning("Could not find any results on Zypresse page");
             return false;
@@ -64,7 +64,6 @@ public class ZypresseParser : ParserBase
             .Where(l => l is not null)
             .Select(l => new Uri($"{BaseUrl}{l.Value}"))
             .SingleOrDefault();
-
         return link;
     }
 

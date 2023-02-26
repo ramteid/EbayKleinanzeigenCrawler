@@ -16,15 +16,18 @@ public class SubscriptionHandler
     private readonly ILogger _logger;
     private readonly ISubscriptionPersistence _subscriptionPersistence;
     private readonly IAlreadyProcessedUrlsPersistence _alreadyProcessedUrlsPersistence;
+    private readonly IErrorStatistics _errorStatistics;
 
     public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger,
-        ISubscriptionPersistence subscriptionPersistence, IAlreadyProcessedUrlsPersistence alreadyProcessedUrlsPersistence)
+        ISubscriptionPersistence subscriptionPersistence, IAlreadyProcessedUrlsPersistence alreadyProcessedUrlsPersistence,
+        IErrorStatistics errorStatistics)
     {
         _outgoingNotifications = outgoingNotifications;
         _parserProvider = parserProvider;
         _logger = logger;
         _subscriptionPersistence = subscriptionPersistence;
         _alreadyProcessedUrlsPersistence = alreadyProcessedUrlsPersistence;
+        _errorStatistics = errorStatistics;
     }
 
     public async Task ProcessAllSubscriptionsAsync()
@@ -147,7 +150,8 @@ public class SubscriptionHandler
             if (links.Count == 0)
             {
                 _logger.Error($"Found no links on page {i + 1}, which is considered an error");
-                _logger.Error(pageHtml.DocumentNode.InnerHtml.ReplaceLineEndings(""));
+                _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             }
             else
             {
