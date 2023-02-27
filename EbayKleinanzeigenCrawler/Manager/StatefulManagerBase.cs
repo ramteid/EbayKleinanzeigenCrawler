@@ -104,9 +104,9 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
                 await StartAddingSubscription(subscriber);
                 return;
             }
-            case InputState.Idle when messageText == "/list":
+            case InputState.Idle when messageText == "/edit":
             {
-                await DisplaySubscriptionList(subscriber);
+                await StartEditingSubscription(subscriber);
                 return;
             }
             case InputState.Idle when messageText == "/help":
@@ -134,9 +134,19 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
                 await EnableOrDisableSubscription(subscriber, messageText);
                 return;
             }
+            case InputState.Idle or not InputState.Idle when messageText == "/list":
+            {
+                await DisplaySubscriptionList(subscriber);
+                return;
+            }
             case not InputState.Idle when messageText == "/cancel":
             {
                 await CancelOperation(subscriber);
+                return;
+            }
+            case InputState.WaitingForSubscriptionToEdit:
+            {
+                await EditSubscription(messageText, subscriber);
                 return;
             }
             case InputState.WaitingForTitleToDisable or InputState.WaitingForTitleToEnable:
@@ -268,6 +278,7 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
     private async Task DisplayHelp(Subscriber subscriber)
     {
         const string message = "Write /add to start the process of defining a subscription. \n" +
+                               "Write /edit to edit the include and exclude keywords of a subscription. \n" +
                                "Write /delete to delete a single subscription. \n" +
                                "Write /deleteall to delete all your subscriptions. \n" +
                                "Write /list to view your current subscriptions \n" +
@@ -304,10 +315,41 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             throw new InvalidOperationException("This doesn't seem to be a valid URL. Please try again.");
         }
 
-        subscriber.IncompleteSubscription = new Subscription { QueryUrl = url };
-        subscriber.State = InputState.WaitingForIncludeKeywords;
-        await SendMessage(subscriber, "Ok. Enter keywords which must all be included in title or description. Separate by \",\" and define alternatives by \"|\". Or write '/skip'");
+        await StartInputIncudeKeywords(subscriber, new Subscription { QueryUrl = url });
+    }
+
+    private async Task StartEditingSubscription(Subscriber subscriber)
+    {
+        await SendMessage(subscriber, "Enter the title of the subscription to edit.\n" +
+                                      "Enter /list to view your current subscriptions or /cancel to cancel");
+        subscriber.State = InputState.WaitingForSubscriptionToEdit;
+    }
+
+    private async Task EditSubscription(string messageText, Subscriber subscriber)
+    {
+        var subscriptionToEdit = subscriber.Subscriptions.FirstOrDefault(s => s.Title == messageText);
+
+        if (subscriptionToEdit is null)
+        {
+            await SendMessage(subscriber, "No subscription with that title was found. Please try again or /cancel.");
+            return;
+        }
+
+        await SendMessage(subscriber, "You can edit include keywords and exclude keywords now.");
+        await StartInputIncudeKeywords(subscriber, subscriptionToEdit);
+    }
+
+    private async Task StartInputIncudeKeywords(Subscriber subscriber, Subscription subscription)
+    {
+        if (subscription.IncludeKeywords is not null && subscription.IncludeKeywords.Any())
+        {
+            await SendMessage(subscriber, "Current keywords to include are:");
+            await SendMessage(subscriber, string.Join(", ", subscription.IncludeKeywords));
+        }
+        await SendMessage(subscriber, "Enter keywords which must all be included in title or description. Separate by \",\" and define alternatives by \"|\". Or write '/skip'");
         await SendMessage(subscriber, "Example: 'one, two|three' will find results where 'one' and 'two' are words in the description; but it will also find results with 'one' and 'three'.");
+        subscriber.IncompleteSubscription = subscription;
+        subscriber.State = InputState.WaitingForIncludeKeywords;
     }
 
     private async Task AnalyzeInputIncludeKeywords(string messageText, Subscriber subscriber)
@@ -321,9 +363,19 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 
         subscriber.IncompleteSubscription.IncludeKeywords = includeKeywords;
         await SendMessage(subscriber, $"Ok. I got {includeKeywords.Count} keywords to include.");
-        subscriber.State = InputState.WaitingForExcludeKeywords;
+        await StartInputExcludeKeywords(subscriber, subscriber.IncompleteSubscription);
+   }
+
+    private async Task StartInputExcludeKeywords(Subscriber subscriber, Subscription subscription)
+    {
+        if (subscription.ExcludeKeywords is not null && subscription.ExcludeKeywords.Any())
+        {
+            await SendMessage(subscriber, "Current keywords to exclude are:");
+            await SendMessage(subscriber, string.Join(", ", subscription.ExcludeKeywords));
+        }
         await SendMessage(subscriber, "Enter keywords which must not appear in title or description, separated by \",\" or write '/skip'");
-        await SendMessage(subscriber, "Hint: If only one of these keywords is found in title or description, there will be no notification.");
+        await SendMessage(subscriber, "Hint: If any of these keywords is found in title or description, there will be no notification.");
+        subscriber.State = InputState.WaitingForExcludeKeywords;
     }
 
     private async Task AnalyzeInputExcludeKeywords(string messageText, Subscriber subscriber)
@@ -335,10 +387,27 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             .Where(keyword => keyword != "/skip")
             .ToList();
 
-        subscriber.IncompleteSubscription.ExcludeKeywords = excludeKeywords;
         await SendMessage(subscriber, $"Ok. I got {excludeKeywords.Count} keywords to exclude.");
-        subscriber.State = InputState.WaitingForInitialPull;
-        await SendMessage(subscriber, "Do you want to receive all existing matches initially? (yes/no)");
+
+        if (subscriber.IncompleteSubscription.ExcludeKeywords is not null && subscriber.IncompleteSubscription.ExcludeKeywords.Any())
+        {
+            subscriber.IncompleteSubscription.ExcludeKeywords = excludeKeywords;
+
+            // Remove the old subscription, which is currently edited
+            subscriber.Subscriptions = subscriber.Subscriptions
+                .Where(s => s.Id != subscriber.IncompleteSubscription.Id)
+                .ToList();
+            
+            // Move the edited subscription to the final list and save
+            PersistIncompleteSubscription(subscriber);
+            await SendMessage(subscriber, "Finished editing!");
+        }
+        else
+        {
+            subscriber.IncompleteSubscription.ExcludeKeywords = excludeKeywords;
+            subscriber.State = InputState.WaitingForInitialPull;
+            await SendMessage(subscriber, "Do you want to receive all existing matches initially? (yes/no)");
+        }
     }
 
     private async Task AnalyzeInputInitialPull(string messageText, Subscriber subscriber)
@@ -371,14 +440,21 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 
     private async Task FinalizeSubscription(Subscriber subscriber)
     {
+        var id = PersistIncompleteSubscription(subscriber);
+        Logger.Information($"Added subscription {id}");
+        await SendMessage(subscriber, $"That's it. Added a new subscription for you. You now have {subscriber.Subscriptions.Count} subscriptions.");
+        await SendMessage(subscriber, "Initially it can take a while until all matches are found. I can only do 40 queries every 5 minutes :-)");
+    }
+
+    private Guid PersistIncompleteSubscription(Subscriber subscriber)
+    {
+        var id = subscriber.IncompleteSubscription.Id;
         subscriber.IncompleteSubscription.Enabled = true;
         subscriber.Subscriptions.Add(subscriber.IncompleteSubscription);
-        Logger.Information($"Added subscription {subscriber.IncompleteSubscription.Id}");
         subscriber.IncompleteSubscription = null;
         subscriber.State = InputState.Idle;
         _subscriptionPersistence.SaveData();
-        await SendMessage(subscriber, $"That's it. Added a new subscription for you. You now have {subscriber.Subscriptions.Count} subscriptions.");
-        await SendMessage(subscriber, "Initially it can take a while until all matches are found. I can only do 40 queries every 5 minutes :-)");
+        return id;
     }
 
     private async Task CancelOperation(Subscriber subscriber)

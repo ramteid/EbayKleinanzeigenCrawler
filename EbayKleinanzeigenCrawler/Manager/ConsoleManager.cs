@@ -15,7 +15,7 @@ public class ConsoleManager : StatefulManagerBase
     /// <summary>
     /// Define an arbitrary Id
     /// </summary>
-    private readonly string _consoleSubscriberId = Guid.NewGuid().ToString();
+    private readonly string _consoleSubscriberId = "5758abbf-8a2d-46a5-8393-48ae8c2e8bb7";
 
     public ConsoleManager(ILogger logger, ISubscriptionPersistence subscriptionManager) : base(logger, subscriptionManager)
     {
