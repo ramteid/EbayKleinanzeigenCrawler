@@ -70,6 +70,7 @@ public class SubscriptionHandler
                             _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
                             _alreadyProcessedUrlsPersistence.SaveData();
                             _subscriptionPersistence.EnsureFirstRunCompletedAndSave(subscription);
+                            _errorStatistics.NotifyOnThreshold();
                         }
                     });
                 });
@@ -153,7 +154,7 @@ public class SubscriptionHandler
                 _logger.Error($"Found no links on page {i + 1}, which is considered an error");
                 // _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
                 File.WriteAllText(Path.Join("data", $"links_{parser.GetType().Name[0]}_{Guid.NewGuid()}"), pageHtml.Text);
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLinks);
             }
             else
             {

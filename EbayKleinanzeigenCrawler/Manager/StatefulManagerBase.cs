@@ -289,6 +289,10 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 
     private async Task ReloadSubscriberFile(Subscriber subscriber)
     {
+        if (subscriber.IsAdmin)
+        {
+            await SendMessage(subscriber, "Only admins can perform this action");
+        }
         var restored = _subscriptionPersistence.RestoreData();
         await SendMessage(subscriber, restored ? "Subscriber list restored" : "Failed to restore subscriber list");
     }
