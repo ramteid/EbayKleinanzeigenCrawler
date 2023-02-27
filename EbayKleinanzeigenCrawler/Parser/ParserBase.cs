@@ -81,7 +81,7 @@ public abstract class ParserBase : IParser
                 Logger.Error("Could not parse link");
                 // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
                 File.WriteAllText(Path.Join("data", $"parseLink_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLink);
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseResultLink);
                 yield break;
             }
 
