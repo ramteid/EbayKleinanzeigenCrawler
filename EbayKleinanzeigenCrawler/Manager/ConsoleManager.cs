@@ -43,8 +43,6 @@ public class ConsoleManager : StatefulManagerBase
 
     protected override Task SendMessage(Subscriber subscriber, string message, bool enablePreview = true)
     {
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.Out.WriteLine($"Message for subscriber {subscriber.Id}:");
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.Out.WriteLine(message);
         Console.ResetColor();
