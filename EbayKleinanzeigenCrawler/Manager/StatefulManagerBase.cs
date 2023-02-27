@@ -361,6 +361,16 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             .Where(keyword => keyword != "/skip")
             .ToList();
 
+        if (messageText.Trim() == "/skip")
+        { 
+            // When in Edit mode and skipping, keep existing keywords
+            var existingIncludeKeywords = subscriber.IncompleteSubscription.IncludeKeywords;
+            if (existingIncludeKeywords is not null && existingIncludeKeywords.Any())
+            {
+                includeKeywords.AddRange(existingIncludeKeywords);
+            }
+        }
+
         subscriber.IncompleteSubscription.IncludeKeywords = includeKeywords;
         await SendMessage(subscriber, $"Ok. I got {includeKeywords.Count} keywords to include.");
         await StartInputExcludeKeywords(subscriber, subscriber.IncompleteSubscription);
@@ -386,6 +396,16 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             .Where(keyword => !string.IsNullOrWhiteSpace(keyword))
             .Where(keyword => keyword != "/skip")
             .ToList();
+
+        if (messageText.Trim() == "/skip")
+        {
+            // When in Edit mode and skipping, keep existing keywords
+            var existingExcludeKeywords = subscriber.IncompleteSubscription.ExcludeKeywords;
+            if (existingExcludeKeywords is not null && existingExcludeKeywords.Any())
+            {
+                excludeKeywords.AddRange(existingExcludeKeywords);
+            }
+        }
 
         await SendMessage(subscriber, $"Ok. I got {excludeKeywords.Count} keywords to exclude.");
 
