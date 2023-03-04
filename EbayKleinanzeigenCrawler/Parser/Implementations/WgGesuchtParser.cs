@@ -97,11 +97,18 @@ public class WgGesuchtParser : ParserBase
 
     protected override string ParseDescriptionText(HtmlDocument document)
     {
+        var addressInfo = document.DocumentNode
+            .SelectNodes(".//div[contains(@class, 'col-sm-4') and contains(@class, 'mb10')]")?
+            .FirstOrDefault()?
+            .InnerHtml
+            .Trim() ?? "";
+
         var description = document.DocumentNode
             .SelectNodes(".//*[@id='freitext_0_content']")?
             .FirstOrDefault()?
             .InnerText
             .Trim() ?? "";
-        return description;
+
+        return addressInfo + description;
     }
 }
