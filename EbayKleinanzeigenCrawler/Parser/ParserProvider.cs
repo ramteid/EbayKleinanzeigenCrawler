@@ -33,6 +33,12 @@ public class ParserProvider : IParserProvider
             return GetOrAddParser(identifierZypresse, typeof(ZypresseParser));
         }
 
+        const string identifierWgGesucht = "wg-gesucht.de";
+        if (subscriptionQueryUrl.Contains(identifierWgGesucht))
+        {
+            return GetOrAddParser(identifierWgGesucht, typeof(WgGesuchtParser));
+        }
+
         throw new NotSupportedException($"No parser exists for '{subscriptionQueryUrl}'");
     }
 
@@ -43,6 +49,6 @@ public class ParserProvider : IParserProvider
             throw new NotSupportedException($"Unsupported parser type: {parserType.Name}");
         }
 
-        return _parsers.GetOrAdd(identifier, _ => (IParser) _serviceProvider.GetService(parserType));
+        return _parsers.GetOrAdd(identifier, _ => (IParser) _serviceProvider.GetService(parserType) ?? throw new InvalidOperationException("Could not get Parser from service provider"));
     }
 }

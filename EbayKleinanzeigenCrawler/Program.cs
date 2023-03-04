@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using EbayKleinanzeigenCrawler.ErrorHandling;
@@ -40,8 +40,9 @@ public class Program
 
         serviceCollection.AddTransient<QueryCounter>();
         serviceCollection.AddTransient<IQueryExecutor, QueryExecutor>();
-        serviceCollection.AddTransient<ZypresseParser>();
         serviceCollection.AddTransient<EbayKleinanzeigenParser>();
+        serviceCollection.AddTransient<ZypresseParser>();
+        serviceCollection.AddTransient<WgGesuchtParser>();
         serviceCollection.AddTransient<SubscriptionHandler>();
         serviceCollection.AddTransient<IDataStorage, JsonStorage>();
         serviceCollection.AddTransient<IParser, ZypresseParser>();
