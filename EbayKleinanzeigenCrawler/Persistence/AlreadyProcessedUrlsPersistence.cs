@@ -107,16 +107,15 @@ internal class AlreadyProcessedUrlsPersistence : IAlreadyProcessedUrlsPersistenc
             // Hint: If the app was turned off longer than that, there might be some duplicate notifications about matches.
             foreach (var element in _alreadyProcessedUrlsPerSubscription)
             {
-                var urls = element.Value;
-                foreach (var url in urls)
-                {
-                    if (url.LastFound < DateTime.Now - TimeSpan.FromDays(31))
-                    {
-                        urls.Remove(url);
-                    }
-                }
+                var urls = element.Value
+                    .Where(url => url.LastFound > DateTime.Now - TimeSpan.FromDays(31))?
+                    .ToList();
                 
-                if (!urls.Any())
+                if (urls.Any())
+                {
+                    _alreadyProcessedUrlsPerSubscription.AddOrUpdate(element.Key, urls, (_, __) => urls);
+                }
+                else
                 {
                     _alreadyProcessedUrlsPerSubscription.Remove(element.Key, out _);
                 }
