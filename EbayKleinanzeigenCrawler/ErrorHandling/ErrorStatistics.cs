@@ -56,20 +56,21 @@ namespace EbayKleinanzeigenCrawler.ErrorHandling
                 _errors = _errors
                     .Where(e => e.Timestamp > DateTime.Now - _maxAge)
                     .ToList();
-            }
 
-            if (_errors.Count >= _notificationThreshold)
-            {
-                var lines = new List<string>
-                    { $"There were {_errors.Count} errors in the last {_maxAge.TotalMinutes}:" }
-                    .Concat(
-                        Enum.GetValues(typeof(ErrorType)).Cast<ErrorType>()
-                        .Select(enumValue => $"{enumValue}: {_errors.Count(e => e.ErrorType == enumValue)}")
-                    );
+                if (_errors.Count >= _notificationThreshold)
+                {
+                    var lines = new List<string>
+                        { $"There were {_errors.Count} errors in the last {_maxAge.TotalMinutes} minutes:" }
+                        .Concat(
+                            Enum.GetValues(typeof(ErrorType)).Cast<ErrorType>()
+                            .Select(enumValue => $"{enumValue}: {_errors.Count(e => e.ErrorType == enumValue)}")
+                        );
 
-                var message = string.Join("\n", lines);
-                _logger.Information("Sending Admin notification: " + message);
-                _notificationService.NotifyAdmins(message);
+                    var message = string.Join("\n", lines);
+                    _logger.Information("Sending Admin notification: " + message);
+                    _notificationService.NotifyAdmins(message);
+                    _errors.Clear();
+                }
             }
         }
     }
