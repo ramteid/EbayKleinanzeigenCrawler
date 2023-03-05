@@ -6,21 +6,6 @@ using System.Linq;
 
 namespace EbayKleinanzeigenCrawler.ErrorHandling
 {
-    public enum ErrorType
-    {
-        HttpRequest,
-        ParseTitle,
-        ParseDescription,
-        ParseResultLink,
-        ParseLinks
-    }
-
-    public class ErrorEntry
-    {
-        public DateTime Timestamp { get; init; }
-        public ErrorType ErrorType { get; init; }
-    }
-
     public class ErrorStatistics : IErrorStatistics
     {
         private readonly TimeSpan _maxAge = TimeSpan.FromHours(1);

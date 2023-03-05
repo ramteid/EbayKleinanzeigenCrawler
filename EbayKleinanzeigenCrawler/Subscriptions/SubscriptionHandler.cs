@@ -148,18 +148,7 @@ public class SubscriptionHandler
                 .ToList();
 
             newResults.AddRange(newLinks);
-
-            if (links.Count == 0)
-            {
-                _logger.Error($"Found no links on page {i + 1}, which is considered an error");
-                // _logger.Error(pageHtml.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"links_{parser.GetType().Name[0]}_{Guid.NewGuid()}"), pageHtml.Text);
-                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseLinks);
-            }
-            else
-            {
-                _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinks.Count}, old: {links.Count - newLinks.Count})");
-            }
+            _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinks.Count}, old: {links.Count - newLinks.Count})");
         }
 
         return newResults;
