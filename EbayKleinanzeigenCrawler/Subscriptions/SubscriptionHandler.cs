@@ -63,12 +63,10 @@ public class SubscriptionHandler
                             catch (Exception e)
                             {
                                 _logger.Error(e, $"Cancelled processing subscription '{subscription.Title}' {subscription.Id}");
-                                _alreadyProcessedUrlsPersistence.SaveData();
                                 continue;
                             }
 
                             _logger.Information($"Finished processing subscription '{subscription.Title}' {subscription.Id}");
-                            _alreadyProcessedUrlsPersistence.SaveData();
                             _subscriptionPersistence.EnsureFirstRunCompletedAndSave(subscription);
                             _errorStatistics.NotifyOnThreshold();
                         }
@@ -86,6 +84,7 @@ public class SubscriptionHandler
     {
         var alreadyProcessedLinks = _alreadyProcessedUrlsPersistence.GetAlreadyProcessedLinksForSubscription(subscription.Id);
         var newResults = await GetNewLinks(parser, subscription.QueryUrl, alreadyProcessedLinks);
+        
         foreach (var newResult in newResults)
         {
             if (subscription.FirstRunCompleted || subscription.InitialPull)
@@ -99,6 +98,9 @@ public class SubscriptionHandler
                 LastFound = DateTime.Now
             });
         }
+
+        _alreadyProcessedUrlsPersistence.AddOrUpdate(subscription.Id, alreadyProcessedLinks);
+        _alreadyProcessedUrlsPersistence.PersistData();
     }
 
     private async Task<List<Result>> GetNewLinks(IParser parser, Uri firstPageUrl, List<AlreadyProcessedUrl> alreadyProcessedLinks)
@@ -154,7 +156,7 @@ public class SubscriptionHandler
         return newResults;
     }
 
-    private static void UpdateAlreadyProcessedLinkLastFoundDate(List<AlreadyProcessedUrl> alreadyProcessedLinks, List<Result> linksFromAdditionalPage)
+    private void UpdateAlreadyProcessedLinkLastFoundDate(List<AlreadyProcessedUrl> alreadyProcessedLinks, List<Result> linksFromAdditionalPage)
     {
         foreach (var result in linksFromAdditionalPage)
         {
@@ -162,6 +164,7 @@ public class SubscriptionHandler
             if (processedLink is not null)
             {
                 processedLink.LastFound = DateTime.Now;
+                _logger.Verbose($"Updating found link {processedLink.Uri} last found date to {processedLink.LastFound}");
             }
         }
     }
