@@ -52,7 +52,6 @@ public class QueryExecutor : IQueryExecutor
             }
             else
             {
-                _errorStatistics.AmendErrorStatistic(ErrorType.HttpRequest);
                 _logger.Debug("First try failed. Trying one more time.");
                 var secondTry = await TryHttpRequest(url);
                 if (secondTry is not null)
@@ -67,7 +66,6 @@ public class QueryExecutor : IQueryExecutor
         }
         catch (Exception e)
         {
-            _errorStatistics.AmendErrorStatistic(ErrorType.HttpRequest);
             _logger.Error(e, $"HTTP request failed: {e.Message}");
             return null;
         }
@@ -95,10 +93,15 @@ public class QueryExecutor : IQueryExecutor
         }
         else
         {
-            // _logger.Warning(html.ReplaceLineEndings(""));
-            var guid = Guid.NewGuid();
-            File.WriteAllText(Path.Join("data", $"validateResponse_html_{guid}"), html);
-            File.WriteAllText(Path.Join("data", $"validateResponse_json_{guid}"), JsonSerializer.Serialize(response));
+            // Don't notify on technical errors
+            if (!response.StatusCode.ToString().StartsWith("5"))
+            {
+                // _logger.Warning(html.ReplaceLineEndings(""));
+                var guid = Guid.NewGuid();
+                File.WriteAllText(Path.Join("data", $"validateResponse_html_{guid}"), html);
+                File.WriteAllText(Path.Join("data", $"validateResponse_response_{guid}"), JsonSerializer.Serialize(response));
+                _errorStatistics.AmendErrorStatistic(ErrorType.HttpRequest);
+            }
             return null;
         }
     }
