@@ -94,7 +94,7 @@ public class QueryExecutor : IQueryExecutor
         else
         {
             // Don't notify on technical errors
-            if (!response.StatusCode.ToString().StartsWith("5"))
+            if ((int)response.StatusCode < 500 || (int)response.StatusCode >= 600)
             {
                 // _logger.Warning(html.ReplaceLineEndings(""));
                 var guid = Guid.NewGuid();
