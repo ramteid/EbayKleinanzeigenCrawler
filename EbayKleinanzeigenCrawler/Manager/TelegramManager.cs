@@ -18,7 +18,7 @@ public class TelegramManager : StatefulManagerBase
     private readonly ITelegramBotClient _botClient;
     private readonly ILogger _logger;
 
-    public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager) : base(logger, subscriptionManager)
+    public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager, IParserProvider parserProvider) : base(logger, subscriptionManager, parserProvider)
     {
         var telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         if (string.IsNullOrWhiteSpace(telegramBotToken))
