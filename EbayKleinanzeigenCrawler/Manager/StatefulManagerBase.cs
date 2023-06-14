@@ -11,11 +11,13 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
 {
     protected readonly ILogger Logger;
     private readonly ISubscriptionPersistence _subscriptionPersistence;
+    private readonly IParserProvider _parserProvider;
 
-    protected StatefulManagerBase(ILogger logger, ISubscriptionPersistence subscriptionManager)
+    protected StatefulManagerBase(ILogger logger, ISubscriptionPersistence subscriptionManager, IParserProvider parserProvider)
     {
         Logger = logger;
         _subscriptionPersistence = subscriptionManager;
+        _parserProvider = parserProvider;
     }
 
     protected abstract Task SendMessage(Subscriber subscriber, string message, bool enablePreview = true);
@@ -319,7 +321,16 @@ public abstract class StatefulManagerBase : IOutgoingNotifications
             throw new InvalidOperationException("This doesn't seem to be a valid URL. Please try again.");
         }
 
-        await StartInputIncudeKeywords(subscriber, new Subscription { QueryUrl = url });
+        var subscription = new Subscription { QueryUrl = url };
+
+        // GetParser() throws an Exception if no parser is found
+        var parser = _parserProvider.GetParser(subscription);
+        if (parser is null)
+        {
+            throw new InvalidOperationException("This doesn't seem to be a supported provider. Please try again.");
+        }
+
+        await StartInputIncudeKeywords(subscriber, subscription);
     }
 
     private async Task StartEditingSubscription(Subscriber subscriber)
