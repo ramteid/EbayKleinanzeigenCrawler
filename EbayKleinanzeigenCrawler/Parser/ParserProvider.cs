@@ -21,8 +21,9 @@ public class ParserProvider : IParserProvider
     {
         var subscriptionQueryUrl = subscription.QueryUrl.ToString();
 
-        const string identifierEbayKleinanzeigen = "ebay-kleinanzeigen.de";
-        if (subscriptionQueryUrl.Contains(identifierEbayKleinanzeigen))
+        const string identifierEbayKleinanzeigenOld = "ebay-kleinanzeigen.de";
+        const string identifierEbayKleinanzeigenNew = "www.kleinanzeigen.de";
+        if (subscriptionQueryUrl.Contains(identifierEbayKleinanzeigenOld) || subscriptionQueryUrl.Contains(identifierEbayKleinanzeigenNew))
         {
             return GetOrAddParser(identifierEbayKleinanzeigen, typeof(EbayKleinanzeigenParser));
         }
