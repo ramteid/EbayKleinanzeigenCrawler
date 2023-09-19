@@ -21,16 +21,23 @@ public class ParserProvider : IParserProvider
     {
         var subscriptionQueryUrl = subscription.QueryUrl.ToString();
 
-        const string identifierEbayKleinanzeigen = "ebay-kleinanzeigen.de";
-        if (subscriptionQueryUrl.Contains(identifierEbayKleinanzeigen))
+        const string identifierEbayKleinanzeigenOld = "ebay-kleinanzeigen.de";
+        const string identifierEbayKleinanzeigenNew = "www.kleinanzeigen.de";
+        if (subscriptionQueryUrl.Contains(identifierEbayKleinanzeigenOld) || subscriptionQueryUrl.Contains(identifierEbayKleinanzeigenNew))
         {
-            return GetOrAddParser(identifierEbayKleinanzeigen, typeof(EbayKleinanzeigenParser));
+            return GetOrAddParser(identifierEbayKleinanzeigenNew, typeof(EbayKleinanzeigenParser));
         }
 
         const string identifierZypresse = "zypresse.com";
         if (subscriptionQueryUrl.Contains(identifierZypresse))
         {
             return GetOrAddParser(identifierZypresse, typeof(ZypresseParser));
+        }
+
+        const string identifierWgGesucht = "wg-gesucht.de";
+        if (subscriptionQueryUrl.Contains(identifierWgGesucht))
+        {
+            return GetOrAddParser(identifierWgGesucht, typeof(WgGesuchtParser));
         }
 
         throw new NotSupportedException($"No parser exists for '{subscriptionQueryUrl}'");
@@ -43,6 +50,6 @@ public class ParserProvider : IParserProvider
             throw new NotSupportedException($"Unsupported parser type: {parserType.Name}");
         }
 
-        return _parsers.GetOrAdd(identifier, _ => (IParser) _serviceProvider.GetService(parserType));
+        return _parsers.GetOrAdd(identifier, _ => (IParser) _serviceProvider.GetService(parserType) ?? throw new InvalidOperationException("Could not get Parser from service provider"));
     }
 }

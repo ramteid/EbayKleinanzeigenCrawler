@@ -10,5 +10,6 @@ public enum InputState
     WaitingForTitle,
     WaitingForSubscriptionToDelete,
     WaitingForTitleToDisable,
-    WaitingForTitleToEnable
+    WaitingForTitleToEnable,
+    WaitingForSubscriptionToEdit
 }

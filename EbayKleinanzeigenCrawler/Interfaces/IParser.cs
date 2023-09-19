@@ -7,7 +7,8 @@ namespace EbayKleinanzeigenCrawler.Interfaces;
 
 public interface IParser
 {
-    IQueryExecutor GetQueryExecutor();
+    IQueryExecutor QueryExecutor { get; }
+
     List<Uri> GetAdditionalPages(HtmlDocument document);
     IEnumerable<Result> ParseLinks(HtmlDocument document);
     bool IsMatch(HtmlDocument document, Subscription subscription);

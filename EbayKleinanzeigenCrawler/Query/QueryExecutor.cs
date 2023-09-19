@@ -1,7 +1,11 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
+using EbayKleinanzeigenCrawler.ErrorHandling;
 using EbayKleinanzeigenCrawler.Interfaces;
 using HtmlAgilityPack;
 using Serilog;
@@ -10,22 +14,21 @@ namespace EbayKleinanzeigenCrawler.Query;
 
 public class QueryExecutor : IQueryExecutor
 {
-    /// <summary>
-    /// This interval is used by EbayKleinanzeigen. They only allow 40 queries every 5 minutes. Above that, they obfuscate their HTML.
-    /// To make sure not to exceed this limit, it is hard-coded here.
-    /// </summary>
     private TimeSpan _timeToWaitBetweenMaxAmountOfRequests;
     private uint _allowedRequestsPerTimespan;
 
     private readonly QueryCounter _queryCounter;
+    private readonly IErrorStatistics _errorStatistics;
+    private readonly IUserAgentProvider _userAgentProvider;
     private readonly ILogger _logger;
     private string _invalidHtml;
 
-    public QueryExecutor(ILogger logger, QueryCounter queryCounter)
+    public QueryExecutor(ILogger logger, QueryCounter queryCounter, IErrorStatistics errorStatistics, IUserAgentProvider userAgentProvider)
     {
-        // TODO: persist cache?
         _logger = logger;
         _queryCounter = queryCounter;
+        _errorStatistics = errorStatistics;
+        _userAgentProvider = userAgentProvider;
     }
 
     public void Initialize(TimeSpan timeToWaitBetweenMaxAmountOfRequests, uint allowedRequestsPerTimespan, string invalidHtml)
@@ -35,47 +38,72 @@ public class QueryExecutor : IQueryExecutor
         _invalidHtml = invalidHtml;
     }
 
-    public bool GetHtml(Uri url, out HtmlDocument htmlDocument)
+    public async Task<HtmlDocument> GetHtml(Uri url)
     {
         _logger.Information($"Loading URL: {url}");
 
         try 
         {
             // Allow retrying once after a 429/Retry-After response was found to avoid temporarily skipping an link
-            var firstTry = TryHttpRequest(url, out htmlDocument);
-            if (!firstTry)
+            var firstTry = await TryHttpRequest(url);
+            if (firstTry is not null)
+            {
+                return firstTry;
+            }
+            else
             {
                 _logger.Debug("First try failed. Trying one more time.");
-                var secondTry = TryHttpRequest(url, out htmlDocument);
-                if (!secondTry)
+                var secondTry = await TryHttpRequest(url);
+                if (secondTry is not null)
                 {
-                    return false;
+                    return secondTry;
+                }
+                else
+                {
+                    return null;
                 }
             }
         }
         catch (Exception e)
         {
             _logger.Error(e, $"HTTP request failed: {e.Message}");
-            htmlDocument = null;
-            return false;
+            return null;
         }
-
-        return true;
     }
 
-    private bool TryHttpRequest(Uri url, out HtmlDocument htmlDocument)
+    private async Task<HtmlDocument> TryHttpRequest(Uri url)
     {
-        _queryCounter.WaitForAcquiringPermissionForQuery(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan);
-        var handler = new HttpClientHandler
+        _queryCounter.WaitForAcquiringPermissionForQuery(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan, acquire: true);
+        var httpClient = new HttpClient(new HttpClientHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All
-        };
-        var httpClient = new HttpClient(handler);
-        var response = httpClient.GetAsync(url).Result;
-        htmlDocument = new HtmlDocument();
-        var html = response.Content.ReadAsStringAsync().Result;
+        });
+
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+        var userAgent = _userAgentProvider.GetRandomUserAgent();
+        requestMessage.Headers.Add("user-agent", userAgent);
+        var response = await httpClient.SendAsync(requestMessage);
+
+        var htmlDocument = new HtmlDocument();
+        var html = await response.Content.ReadAsStringAsync();
         htmlDocument.LoadHtml(html);
-        return ValidateResponse(url, response, html);
+        if (ValidateResponse(url, response, html))
+        {
+            return htmlDocument;
+        }
+        else
+        {
+            // Don't notify on technical errors
+            if ((int)response.StatusCode < 500 || (int)response.StatusCode >= 600)
+            {
+                // _logger.Warning(html.ReplaceLineEndings(""));
+                var guid = Guid.NewGuid();
+                File.WriteAllText(Path.Join("data", $"validateResponse_html_{guid}"), html);
+                File.WriteAllText(Path.Join("data", $"validateResponse_response_{guid}"), JsonSerializer.Serialize(response));
+                _errorStatistics.AmendErrorStatistic(ErrorType.HttpRequest);
+            }
+            return null;
+        }
     }
 
     private bool ValidateResponse(Uri url, HttpResponseMessage response, string html)
@@ -106,7 +134,7 @@ public class QueryExecutor : IQueryExecutor
 
         if ((int)response.StatusCode >= 400)
         {
-            _logger.Error($"Server responded with error code '{response.StatusCode}'");
+            _logger.Error($"Server responded with error code '{(int)response.StatusCode} {response.StatusCode}'");
             return false;
         }
 

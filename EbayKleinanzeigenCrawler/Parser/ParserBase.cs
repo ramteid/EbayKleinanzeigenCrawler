@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
@@ -13,11 +14,15 @@ public abstract class ParserBase : IParser
 {
     protected readonly ILogger Logger;
     private readonly IQueryExecutor _queryExecutor;
-    
-    protected ParserBase(ILogger logger, IQueryExecutor queryExecutor)
+    private readonly IErrorStatistics _errorStatistics;
+
+    public IQueryExecutor QueryExecutor => _queryExecutor;
+
+    protected ParserBase(ILogger logger, IQueryExecutor queryExecutor, IErrorStatistics errorStatistics)
     {
         Logger = logger;
         _queryExecutor = queryExecutor;
+        _errorStatistics = errorStatistics;
         _queryExecutor.Initialize(
             timeToWaitBetweenMaxAmountOfRequests: TimeToWaitBetweenMaxAmountOfRequests, 
             allowedRequestsPerTimespan: AllowedRequestsPerTimespan,
@@ -48,11 +53,6 @@ public abstract class ParserBase : IParser
 
     protected abstract string ParseDescriptionText(HtmlDocument document);
 
-    public IQueryExecutor GetQueryExecutor()
-    {
-        return _queryExecutor;
-    }
-
     public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
     {
         if (!EnsureValidHtml(resultPage))
@@ -62,7 +62,6 @@ public abstract class ParserBase : IParser
         }
         
         var results = ParseResults(resultPage);
-
         if (results is null)
         {
             // When no results are found
@@ -76,44 +75,45 @@ public abstract class ParserBase : IParser
                 continue;
             }
 
-            // Validation must happen in the implementations
             var link = ParseResultLink(result);
+            if (link is null)
+            {
+                Logger.Error("Could not parse link");
+                // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
+                File.WriteAllText(Path.Join("data", $"parseLink_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
+                _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseResultLink);
+                yield break;
+            }
+
+            // For some ads on some platforms it is normal not to have a date or price displayed.
+            // Handle these cases gracefully and threat date and price as optional.
             var date = ParseResultDate(result);
             var price = ParseResultPrice(result);
+
             yield return new Result { Link = link, CreationDate = date ?? "", Price = price ?? "" };
         }
     }
 
     public virtual bool IsMatch(HtmlDocument document, Subscription subscription)
     {
-        if (document.DocumentNode.InnerHtml.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
-        {
-            Logger.Warning("Tried to parse ad which does not exist anymore");
-            return false;
-        }
-
-        if (subscription.IncludeKeywords is null)
-        {
-            throw new InvalidOperationException("IncludeKeywords cannot be null");
-        }
-
-        if (subscription.ExcludeKeywords is null)
-        {
-            throw new InvalidOperationException("ExcludeKeywords cannot be null");
-        }
-
         var title = ParseTitle(document);
         if (string.IsNullOrWhiteSpace(title))
         {
-            Logger.Error(document.DocumentNode.InnerHtml);
-            throw new InvalidOperationException("Could not parse title");
+            Logger.Error("Could not parse title");
+            // Logger.Error(document.Text.ReplaceLineEndings(""));
+            File.WriteAllText(Path.Join("data", $"title_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
+            _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
+            return false;
         }
 
         var descriptionText = ParseDescriptionText(document);
         if (string.IsNullOrWhiteSpace(descriptionText))
         {
-            Logger.Error(document.DocumentNode.InnerHtml);
-            throw new InvalidOperationException("Could not parse description");
+            Logger.Error("Could not parse description");
+            // Logger.Error(document.Text.ReplaceLineEndings(""));
+            File.WriteAllText(Path.Join("data", $"descr_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
+            _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
+            return false;
         }
 
         var allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
@@ -123,6 +123,11 @@ public abstract class ParserBase : IParser
 
     private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
     {
+        if (subscription.IncludeKeywords is null)
+        {
+            throw new InvalidOperationException("IncludeKeywords cannot be null");
+        }
+
         if (subscription.IncludeKeywords.Count == 0)
         {
             return true;
@@ -156,6 +161,11 @@ public abstract class ParserBase : IParser
 
     private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
     {
+        if (subscription.ExcludeKeywords is null)
+        {
+            throw new InvalidOperationException("ExcludeKeywords cannot be null");
+        }
+
         if (subscription.ExcludeKeywords.Count == 0)
         {
             return false;
