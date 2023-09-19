@@ -6,7 +6,8 @@ namespace EbayKleinanzeigenCrawler.Interfaces;
 
 public interface IAlreadyProcessedUrlsPersistence
 {
+    void AddOrUpdate(Guid key, List<AlreadyProcessedUrl> data);
     List<AlreadyProcessedUrl> GetAlreadyProcessedLinksForSubscription(Guid id);
     void RestoreData();
-    void SaveData();
+    void PersistData();
 }

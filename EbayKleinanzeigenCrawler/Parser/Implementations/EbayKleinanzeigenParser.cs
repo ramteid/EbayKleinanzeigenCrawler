@@ -4,18 +4,22 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EbayKleinanzeigenCrawler.Interfaces;
-using EbayKleinanzeigenCrawler.Models;
 
 namespace EbayKleinanzeigenCrawler.Parser.Implementations;
 
 public class EbayKleinanzeigenParser : ParserBase
 {
     private const string BaseUrl = "https://www.ebay-kleinanzeigen.de";
-    protected override TimeSpan TimeToWaitBetweenMaxAmountOfRequests => TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(10);
+    
+    /// <summary>
+    /// This interval is used by EbayKleinanzeigen. They only allow 40 queries every 5 minutes. Above that, they obfuscate their HTML.
+    /// To make sure not to exceed this limit, it is hard-coded here.
+    /// </summary>
+    protected override TimeSpan TimeToWaitBetweenMaxAmountOfRequests => TimeSpan.FromMinutes(5);
     protected override uint AllowedRequestsPerTimespan => 40;
     protected override string InvalidHtml => "<html><head><meta charset=\"utf-8\"><script>";
 
-    public EbayKleinanzeigenParser(ILogger logger, IQueryExecutor queryExecutor) : base(logger, queryExecutor) { }
+    public EbayKleinanzeigenParser(ILogger logger, IQueryExecutor queryExecutor, IErrorStatistics errorStatistics) : base(logger, queryExecutor, errorStatistics) { }
 
     protected override bool EnsureValidHtml(HtmlDocument resultPage)
     {
@@ -86,11 +90,6 @@ public class EbayKleinanzeigenParser : ParserBase
             .Select(l => new Uri($"{BaseUrl}{l.Value}"))
             .SingleOrDefault();
 
-        if (link is null)
-        {
-            throw new Exception("Could not parse link");
-        }
-
         return link;
     }
 
@@ -101,13 +100,6 @@ public class EbayKleinanzeigenParser : ParserBase
             .Select(d => d.InnerText)
             .SingleOrDefault()?
             .Trim();
-
-        if (string.IsNullOrWhiteSpace(date))
-        {
-            Logger.Debug(result.InnerHtml);
-            Logger.Warning("Could not parse date");
-        }
-
         return date;
     }
 
@@ -118,18 +110,17 @@ public class EbayKleinanzeigenParser : ParserBase
             .Select(d => d.InnerText)
             .SingleOrDefault()?
             .Trim();
-
-        if (string.IsNullOrWhiteSpace(price))
-        {
-            Logger.Debug(result.InnerHtml);
-            Logger.Warning("Could not parse price");
-        }
-
         return price;
     }
 
     protected override string ParseTitle(HtmlDocument document)
     {
+        if (document.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        {
+            Logger.Warning("Tried to parse ad which does not exist anymore");
+            return null;
+        }
+
         return document.DocumentNode
             .Descendants("h1")
             .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-title"))?
@@ -142,10 +133,5 @@ public class EbayKleinanzeigenParser : ParserBase
             .Descendants("p")
             .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-description-text"))?
             .InnerHtml;
-    }
-
-    public override bool IsMatch(HtmlDocument document, Subscription subscription)
-    {
-        return base.IsMatch(document, subscription);
     }
 }

@@ -12,4 +12,5 @@ public class Subscription
     public List<string> ExcludeKeywords { get; set; }
     public bool InitialPull { get; set; }
     public bool Enabled { get; set; }
+    public bool FirstRunCompleted { get; set; } = false;
 }

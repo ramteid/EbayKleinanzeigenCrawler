@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,7 +19,7 @@ public class TelegramManager : StatefulManagerBase
     private readonly ITelegramBotClient _botClient;
     private readonly ILogger _logger;
 
-    public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager) : base(logger, subscriptionManager)
+    public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager, IParserProvider parserProvider) : base(logger, subscriptionManager, parserProvider)
     {
         var telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         if (string.IsNullOrWhiteSpace(telegramBotToken))
@@ -79,14 +80,46 @@ public class TelegramManager : StatefulManagerBase
 
     private async Task SendMessageTelegram(Subscriber subscriber, string message, bool enablePreview, ParseMode parseMode)
     {
-        var result = await _botClient.SendTextMessageAsync(
-            chatId: subscriber.Id,
-            text: message,
-            parseMode: parseMode,
-            disableWebPagePreview: !enablePreview
-        );
+        // Telegram message can be at most 4096 characters long
+        var parts = SplitString(message);
 
-        Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");  // TODO: Add Admin-Notifications, e.g. for accumulated parsing failures
+        foreach (string part in parts)
+        {
+            var result = await _botClient.SendTextMessageAsync(
+                chatId: subscriber.Id,
+                text: part,
+                parseMode: parseMode,
+                disableWebPagePreview: !enablePreview
+            );
+
+            Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");
+        }
+    }
+
+    private static string[] SplitString(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            return Array.Empty<string>();
+        }
+
+        int chunkSize = 4096;
+        int inputLength = input.Length;
+        int numChunks = (int)Math.Ceiling((double)inputLength / chunkSize);
+
+        var chunks = new List<string>(numChunks);
+
+        for (int i = 0; i < numChunks; i++)
+        {
+            int startIndex = i * chunkSize;
+            int endIndex = Math.Min(startIndex + chunkSize, inputLength);
+            int chunkLength = endIndex - startIndex;
+
+            string chunk = input.Substring(startIndex, chunkLength);
+            chunks.Add(chunk);
+        }
+
+        return chunks.ToArray();
     }
 
     protected override async Task DisplaySubscriptionList(Subscriber subscriber)
