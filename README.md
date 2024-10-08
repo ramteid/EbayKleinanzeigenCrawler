@@ -4,6 +4,7 @@
 # Currently supported providers
 * ebay-kleinanzeigen.de
 * zypresse.com
+* wg-gesucht.de
 
 # Features:
 * Notifies you reliably about new articles within 0-5 minutes!
