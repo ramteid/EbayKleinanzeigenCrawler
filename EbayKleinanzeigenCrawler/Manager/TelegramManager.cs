@@ -11,6 +11,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using DotNetEnv;
 
 namespace EbayKleinanzeigenCrawler.Manager;
 
@@ -21,6 +22,8 @@ public class TelegramManager : StatefulManagerBase
 
     public TelegramManager(ILogger logger, ISubscriptionPersistence subscriptionManager, IParserProvider parserProvider) : base(logger, subscriptionManager, parserProvider)
     {
+        // Load environment variables from .env file
+        Env.Load();
         var telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
         if (string.IsNullOrWhiteSpace(telegramBotToken))
         {

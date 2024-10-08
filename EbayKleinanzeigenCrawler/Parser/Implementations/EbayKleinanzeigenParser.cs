@@ -84,7 +84,7 @@ public class EbayKleinanzeigenParser : ParserBase
     protected override Uri ParseResultLink(HtmlNode result)
     {
         var link = result
-            .SelectNodes("div[@class='aditem-main']//h2//a")?
+            .SelectNodes("div[@class='aditem-image']//a")?
             .Select(n => n.Attributes.SingleOrDefault(a => a.Name == "href"))
             .Where(l => l is not null)
             .Select(l => new Uri($"{BaseUrl}{l.Value}"))

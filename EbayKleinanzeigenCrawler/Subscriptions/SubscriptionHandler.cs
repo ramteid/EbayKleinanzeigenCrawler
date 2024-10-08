@@ -6,7 +6,6 @@ using EbayKleinanzeigenCrawler.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 using EbayKleinanzeigenCrawler.Models;
-using System.IO;
 
 namespace EbayKleinanzeigenCrawler.Subscriptions;
 

@@ -1,6 +1,5 @@
 ﻿using EbayKleinanzeigenCrawler.Interfaces;
 using EbayKleinanzeigenCrawler.Models;
-using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Concurrent;
