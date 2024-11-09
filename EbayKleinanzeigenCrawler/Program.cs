@@ -41,11 +41,9 @@ public class Program
         serviceCollection.AddTransient<QueryCounter>();
         serviceCollection.AddTransient<IQueryExecutor, QueryExecutor>();
         serviceCollection.AddTransient<EbayKleinanzeigenParser>();
-        serviceCollection.AddTransient<ZypresseParser>();
         serviceCollection.AddTransient<WgGesuchtParser>();
         serviceCollection.AddTransient<SubscriptionHandler>();
         serviceCollection.AddTransient<IDataStorage, JsonStorage>();
-        serviceCollection.AddTransient<IParser, ZypresseParser>();
         serviceCollection.AddTransient<IUserAgentProvider, UserAgentProvider>();
 
         serviceCollection.AddSingleton<IParserProvider, ParserProvider>();

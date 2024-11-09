@@ -3,7 +3,6 @@
 
 # Currently supported providers
 * ebay-kleinanzeigen.de
-* zypresse.com
 * wg-gesucht.de
 
 # Features:

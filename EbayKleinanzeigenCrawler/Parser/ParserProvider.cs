@@ -28,12 +28,6 @@ public class ParserProvider : IParserProvider
             return GetOrAddParser(identifierEbayKleinanzeigenNew, typeof(EbayKleinanzeigenParser));
         }
 
-        const string identifierZypresse = "zypresse.com";
-        if (subscriptionQueryUrl.Contains(identifierZypresse))
-        {
-            return GetOrAddParser(identifierZypresse, typeof(ZypresseParser));
-        }
-
         const string identifierWgGesucht = "wg-gesucht.de";
         if (subscriptionQueryUrl.Contains(identifierWgGesucht))
         {
