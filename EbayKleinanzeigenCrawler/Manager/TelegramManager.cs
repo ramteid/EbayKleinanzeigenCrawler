@@ -36,7 +36,7 @@ public class TelegramManager : StatefulManagerBase
         // StartReceiving does not block the caller thread. Receiving is done on the ThreadPool.
         _botClient.StartReceiving(
             updateHandler: HandleUpdateAsync,
-            pollingErrorHandler: HandlePollingErrorAsync,
+            errorHandler: HandlePollingErrorAsync,
             receiverOptions: new ReceiverOptions
             {
                 AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
@@ -88,11 +88,14 @@ public class TelegramManager : StatefulManagerBase
 
         foreach (string part in parts)
         {
-            var result = await _botClient.SendTextMessageAsync(
+            var result = await _botClient.SendMessage(
                 chatId: subscriber.Id,
                 text: part,
                 parseMode: parseMode,
-                disableWebPagePreview: !enablePreview
+                linkPreviewOptions: new LinkPreviewOptions
+                {
+                    IsDisabled = !enablePreview
+                }
             );
 
             Logger.Information($"Recipient: {subscriber.Id}, Message: \"{message}\"");
