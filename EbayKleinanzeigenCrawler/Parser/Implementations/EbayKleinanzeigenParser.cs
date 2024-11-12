@@ -25,13 +25,13 @@ public class EbayKleinanzeigenParser : ParserBase
     {
         // TODO: An URL with query params seems to forget the query keywords and searches for anything. Do not allow ? in URLs.
         // e.g. /s-anzeigen/96123/anzeige:angebote/lescha-betonmischer/c0-l6895?distance=50&maxPrice=100
-        if (resultPage.Text.StartsWith(InvalidHtml) || resultPage.Text.Contains("429 Too many requests from"))
+        if (resultPage.ParsedText.StartsWith(InvalidHtml) || resultPage.ParsedText.Contains("429 Too many requests from"))
         {
             Logger.Warning("Invalid HTML detected");
             return false;
         }
 
-        if (resultPage.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        if (resultPage.ParsedText.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
         {
             Logger.Warning("Tried to parse ad which does not exist anymore");
             return false;
@@ -115,7 +115,7 @@ public class EbayKleinanzeigenParser : ParserBase
 
     protected override string ParseTitle(HtmlDocument document)
     {
-        if (document.Text.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
+        if (document.ParsedText.Contains("Die gewünschte Anzeige ist nicht mehr verfügbar"))
         {
             Logger.Warning("Tried to parse ad which does not exist anymore");
             return null;

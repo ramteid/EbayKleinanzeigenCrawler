@@ -24,7 +24,7 @@ public class WgGesuchtParser : ParserBase
 
     protected override bool EnsureValidHtml(HtmlDocument resultPage)
     {
-        if (!resultPage.Text.Contains("wgg_card offer_list_item"))
+        if (!resultPage.ParsedText.Contains("wgg_card offer_list_item"))
         {
             Logger.Warning("Could not find any results on page");
             return false;

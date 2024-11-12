@@ -80,7 +80,7 @@ public abstract class ParserBase : IParser
             {
                 Logger.Error("Could not parse link");
                 // Logger.Error(resultPage.Text.ReplaceLineEndings(""));
-                File.WriteAllText(Path.Join("data", $"parseLink_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.Text);
+                File.WriteAllText(Path.Join("data", $"parseLink_{GetType().Name[0]}_{Guid.NewGuid()}"), resultPage.ParsedText);
                 _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseResultLink);
                 yield break;
             }
@@ -101,7 +101,7 @@ public abstract class ParserBase : IParser
         {
             Logger.Error("Could not parse title");
             // Logger.Error(document.Text.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"title_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
+            File.WriteAllText(Path.Join("data", $"title_{GetType().Name[0]}_{Guid.NewGuid()}"), document.ParsedText);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseTitle);
             return false;
         }
@@ -111,7 +111,7 @@ public abstract class ParserBase : IParser
         {
             Logger.Error("Could not parse description");
             // Logger.Error(document.Text.ReplaceLineEndings(""));
-            File.WriteAllText(Path.Join("data", $"descr_{GetType().Name[0]}_{Guid.NewGuid()}"), document.Text);
+            File.WriteAllText(Path.Join("data", $"descr_{GetType().Name[0]}_{Guid.NewGuid()}"), document.ParsedText);
             _errorStatistics.AmendErrorStatistic(ErrorHandling.ErrorType.ParseDescription);
             return false;
         }
