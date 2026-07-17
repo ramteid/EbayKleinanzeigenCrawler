@@ -9,7 +9,7 @@ namespace EbayKleinanzeigenCrawler.Parser.Implementations;
 
 public class EbayKleinanzeigenParser : ParserBase
 {
-    private const string BaseUrl = "https://www.ebay-kleinanzeigen.de";
+    private const string BaseUrl = "https://www.kleinanzeigen.de";
     
     /// <summary>
     /// This interval is used by EbayKleinanzeigen. They only allow 40 queries every 5 minutes. Above that, they obfuscate their HTML.

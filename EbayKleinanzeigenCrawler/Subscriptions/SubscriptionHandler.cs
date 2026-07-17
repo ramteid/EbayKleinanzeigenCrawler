@@ -159,7 +159,7 @@ public class SubscriptionHandler
     {
         foreach (var result in linksFromAdditionalPage)
         {
-            var processedLink = alreadyProcessedLinks.SingleOrDefault(l => l.Uri.Equals(result.Link));
+            var processedLink = alreadyProcessedLinks.FirstOrDefault(l => l.Uri.Equals(result.Link));
             if (processedLink is not null)
             {
                 processedLink.LastFound = DateTime.Now;
