@@ -1,10 +1,13 @@
-EbayKleinanzeigenCrawler/obj/
-EbayKleinanzeigenCrawler/bin/
-EbayKleinanzeigenCrawler/Properties/PublishProfiles/
+KleinanzeigenCrawler/obj/
+KleinanzeigenCrawler/bin/
+KleinanzeigenCrawler/Properties/PublishProfiles/
 */*.csproj.user
 .vs/
 .vscode/
 .devcontainer/
 **.json
 **.txt
-
+.git
+data
+bin
+obj

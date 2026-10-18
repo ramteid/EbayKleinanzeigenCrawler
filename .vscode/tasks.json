@@ -1,0 +1,51 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "vsdbg: ensure",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "set -euo pipefail\nROOT=\"${workspaceFolder}\"\nVSDBG_DIR=\"$ROOT/.vsdbg\"\nif [ -f \"$VSDBG_DIR/vsdbg\" ]; then\n  echo \"[vsdbg] Reusing existing debugger at $VSDBG_DIR\"\nelse\n  echo \"[vsdbg] Downloading vsdbg into $VSDBG_DIR\"\n  rm -rf \"$VSDBG_DIR\"\n  mkdir -p \"$VSDBG_DIR\"\n  curl -sSL https://aka.ms/getvsdbgsh | bash /dev/stdin -v latest -l \"$VSDBG_DIR\"\nfi\n"
+            ],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-compose: debug",
+            "type": "docker-compose",
+            "dependsOn": [
+                "vsdbg: ensure"
+            ],
+            "dockerCompose": {
+                "files": [
+                    "${workspaceFolder}/docker-compose.yml",
+                    "${workspaceFolder}/docker-compose.debug.yml"
+                ],
+                "up": {
+                    "detached": true,
+                    "build": true
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker-compose: down",
+            "type": "docker-compose",
+            "dockerCompose": {
+                "files": [
+                    "${workspaceFolder}/docker-compose.yml",
+                    "${workspaceFolder}/docker-compose.debug.yml"
+                ],
+                "down": {
+                    "removeVolumes": false
+                }
+            },
+            "problemMatcher": []
+        }
+    ]
+}

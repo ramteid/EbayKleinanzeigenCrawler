@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Docker Compose: Bot (.NET)",
+            "type": "docker",
+            "request": "launch",
+            "preLaunchTask": "docker-compose: debug",
+            "postDebugTask": "docker-compose: down",
+            "netCore": {
+                "appProject": "${workspaceFolder}/KleinanzeigenCrawler/KleinanzeigenCrawler.csproj"
+            },
+            "dockerServerReadyAction": {
+                "action": "none"
+            }
+        }
+    ]
+}

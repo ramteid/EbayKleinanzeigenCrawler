@@ -1,9 +1,13 @@
 bin/
 obj/
 data/
-EbayKleinanzeigenCrawler/Properties/PublishProfiles/
+.vsdbg/
+KleinanzeigenCrawler/Properties/PublishProfiles/
 */*.csproj.user
 .vs/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 TestResults/
 .env
+data

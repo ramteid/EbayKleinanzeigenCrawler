@@ -1,0 +1,93 @@
+groups:
+  - name: crawler_alerts
+    interval: 1m
+    rules:
+      # High error rate alert
+      - alert: HighParseErrorRate
+        expr: rate(crawler_parse_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High parsing error rate detected"
+          description: "Parse error rate is {{ $value }} errors/sec over the last 5 minutes"
+      
+      # No notifications sent
+      - alert: NoRecentNotifications
+        expr: rate(crawler_notifications_sent_total[15m]) == 0 AND crawler_active_subscriptions > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No notifications sent recently"
+          description: "No notifications have been sent in the last 15 minutes despite having active subscriptions"
+      
+      # Rate limit exceeded
+      - alert: RateLimitExceeded
+        expr: increase(crawler_http_requests_total{status_code="429"}[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rate limit exceeded on {{ $labels.provider }}"
+          description: "{{ $value }} rate limit errors in the last 5 minutes"
+      
+      # High HTTP error rate
+      - alert: HighHttpErrorRate
+        expr: (rate(crawler_http_requests_total{success="false"}[5m]) / rate(crawler_http_requests_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate"
+          description: "HTTP error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+      
+      # No active subscriptions (possible issue)
+      - alert: NoActiveSubscriptions
+        expr: crawler_active_subscriptions == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active subscriptions"
+          description: "There are no active subscriptions to monitor"
+      
+      # Critical: Application appears to be stuck
+      - alert: ApplicationStuck
+        expr: rate(crawler_subscriptions_processed_total[5m]) == 0 AND crawler_active_subscriptions > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application appears to be stuck"
+          description: "No subscriptions have been processed in the last 10 minutes"
+      
+      # High request latency
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, rate(crawler_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency on {{ $labels.provider }}"
+          description: "95th percentile request latency is {{ $value }}s"
+      
+      # Notification delivery failures
+      - alert: HighNotificationFailureRate
+        expr: (rate(crawler_notifications_sent_total{success="false"}[5m]) / rate(crawler_notifications_sent_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High notification failure rate"
+          description: "Notification failure rate is {{ $value | humanizePercentage }}"
+      
+      # Aggregate error burst (replacement for legacy Telegram admin pings)
+      - alert: CrawlerErrorBurst
+        expr: (sum(increase(crawler_parse_errors_total[15m])) + sum(increase(crawler_http_requests_total{success="false"}[15m]))) > 20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Crawler error burst detected"
+          description: "{{ $value }} errors observed across HTTP and parsing in the last 15 minutes"

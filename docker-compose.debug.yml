@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  bot:
+    build:
+      context: .
+      args:
+        BUILD_CONFIGURATION: Debug
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+      ASPNETCORE_ENVIRONMENT: Development
+    volumes:
+      - ./data:/app/data
+      - ./.vsdbg:/remote_debugger:rw
+    entrypoint: ["tail", "-f", "/dev/null"]

@@ -1,16 +1,93 @@
-version: '3'
-
 services:
-    ebay-bot:
+    bot:
         restart: always
         build: .
-        
         volumes:
-          - ebay-bot-volume:/bot/data
-
+          - ./data:/app/data
         environment:
-            # This variable is taken from the environment. You can use .env-files for this.
             TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+            ALLOW_NEW_USERS: ${ALLOW_NEW_USERS:-true}
+            ENABLE_PROMETHEUS: ${ENABLE_PROMETHEUS:-true}
+            PROMETHEUS_PORT: 9090
+            CHECK_INTERVAL_SECONDS: 60
+            SESSION_TIMEOUT_MINUTES: 15
+            DATA_PATH: data
+            REDIS_CONNECTION_STRING: redis:6379,abortConnect=false
+        networks:
+          - bot-network
+        depends_on:
+          - prometheus
+          - redis
+
+    prometheus:
+        image: prom/prometheus:latest
+        restart: always
+        volumes:
+          - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+          - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
+          - kleinanzeigen-bot-prometheus-data:/prometheus
+        networks:
+          - bot-network
+        command:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+          - '--storage.tsdb.retention.time=30d'
+          - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+          - '--web.console.templates=/usr/share/prometheus/consoles'
+
+    grafana:
+        image: grafana/grafana:latest
+        restart: always
+        volumes:
+          - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+          - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+          - kleinanzeigen-bot-grafana-data:/var/lib/grafana
+        ports:
+          - "3333:3000"
+        environment:
+          - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+          - GF_USERS_ALLOW_SIGN_UP=false
+          - GF_SERVER_ROOT_URL=http://localhost:3000
+        networks:
+          - bot-network
+        depends_on:
+          - prometheus
+
+    alertmanager:
+        image: prom/alertmanager:latest
+        restart: always
+        volumes:
+          - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+          - kleinanzeigen-bot-alertmanager-data:/alertmanager
+        networks:
+          - bot-network
+        ports:
+          - "9093:9093"
+        command:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+
+    redis:
+        image: redis:7-alpine
+        restart: always
+        command: redis-server --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000
+        volumes:
+          - kleinanzeigen-bot-redis-data:/data
+        networks:
+          - bot-network
+        healthcheck:
+          test: ["CMD", "redis-cli", "ping"]
+          interval: 10s
+          timeout: 3s
+          retries: 5
+
+networks:
+  bot-network:
+    driver: bridge
 
 volumes:
-    ebay-bot-volume:
+    kleinanzeigen-bot-prometheus-data:
+    kleinanzeigen-bot-grafana-data:
+    kleinanzeigen-bot-alertmanager-data:
+    # Redis contains already processed URLs
+    kleinanzeigen-bot-redis-data:
