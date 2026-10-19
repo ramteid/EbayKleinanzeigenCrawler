@@ -2,6 +2,7 @@ services:
     bot:
         restart: always
         build: .
+        user: "1001:100"
         volumes:
           - ./data:/app/data
         environment:
