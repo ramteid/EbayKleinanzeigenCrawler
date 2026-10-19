@@ -30,12 +30,12 @@ public class WgGesuchtParserTests
             <html>
             <body>
                 <div class='wgg_card offer_list_item'>
-                    <h3><a href='/offer/123'>Title 1</a></h3>
+                    <h3><a href='/wohnungen-in-Berlin.123.html'>Title 1</a></h3>
                     <div><span>Online: 10.10.2023</span></div>
                     <div><b>500 &euro;</b></div>
                 </div>
                 <div class='wgg_card offer_list_item'>
-                    <h3><a href='https://www.wg-gesucht.de/offer/456'>Title 2</a></h3>
+                    <h3><a href='https://www.wg-gesucht.de/wohnungen-in-Berlin.456.html'>Title 2</a></h3>
                     <div><span>Online: 11.10.2023</span></div>
                     <div><b>600 €</b></div>
                 </div>
@@ -49,11 +49,11 @@ public class WgGesuchtParserTests
 
         // Assert
         results.Should().HaveCount(2);
-        results[0].Link.ToString().Should().Be("https://www.wg-gesucht.de/offer/123");
+        results[0].Link.ToString().Should().Be("https://www.wg-gesucht.de/wohnungen-in-Berlin.123.html");
         results[0].CreationDate.Should().Be("Online: 10.10.2023");
         results[0].Price.Should().Be("500 €");
 
-        results[1].Link.ToString().Should().Be("https://www.wg-gesucht.de/offer/456");
+        results[1].Link.ToString().Should().Be("https://www.wg-gesucht.de/wohnungen-in-Berlin.456.html");
         results[1].CreationDate.Should().Be("Online: 11.10.2023");
         results[1].Price.Should().Be("600 €");
     }

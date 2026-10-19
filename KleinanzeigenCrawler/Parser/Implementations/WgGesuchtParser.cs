@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Monitoring;
@@ -20,19 +21,27 @@ public class WgGesuchtParser : ParserBase
 
     public override List<Uri> GetAdditionalPages(HtmlDocument document)
     {
-        // wg-gesucht.de uses JQuery pagination, which cannot be parsed
-        return Enumerable.Empty<Uri>().ToList();
+        // Pagination links carry the active search filters in their query string.
+        var canonical = ResolveLink(BaseUrl, document.DocumentNode.SelectSingleNode("//meta[@property='og:url']")?.GetAttributeValue("content", null));
+        var searchPrefix = canonical == null ? null : Regex.Replace(canonical.AbsolutePath, @"\.\d+\.html$", ".");
+        return document.DocumentNode.SelectNodes("//*[@id='main_column']//a[@href]")?
+            .Where(node => HasClass(node, "black_text_link"))
+            .Select(node => ResolveLink(BaseUrl, node.GetAttributeValue("href", "")))
+            .Where(link => link != null && Regex.IsMatch(link.AbsolutePath, @"\.\d+\.\d+\.\d+\.[1-9]\d*\.html$", RegexOptions.CultureInvariant))
+            .Where(link => searchPrefix == null || link.AbsolutePath.StartsWith(searchPrefix, StringComparison.Ordinal))
+            .Distinct()
+            .ToList() ?? new List<Uri>();
     }
 
     protected override bool EnsureValidHtml(HtmlDocument resultPage)
     {
-        if (!resultPage.ParsedText.Contains("wgg_card offer_list_item"))
+        if (ParseResults(resultPage)?.Count > 0 || GetTotalResultCount(resultPage) == 0)
         {
-            Logger.Warning("Could not find any results on page");
-            return false;
+            return true;
         }
 
-        return true;
+        Logger.Warning("Search page contains neither recognized result cards nor an explicit zero result count");
+        return false;
     }
 
     protected override bool ShouldSkipResult(HtmlNode result)
@@ -46,43 +55,31 @@ public class WgGesuchtParser : ParserBase
 
     protected override List<HtmlNode> ParseResults(HtmlDocument resultPage)
     {
-        var nodes = resultPage.DocumentNode
-            .SelectNodes(".//div[contains(@class, 'wgg_card') and contains(@class, 'offer_list_item')]");
-        
-        if (nodes == null)
-        {
-            return null;
-        }
-        
-        return nodes.ToList();
+        var container = resultPage.DocumentNode.SelectSingleNode("//*[@id='main_column']") ?? resultPage.DocumentNode;
+        return container
+            .SelectNodes(".//*[contains(concat(' ', normalize-space(@class), ' '), ' offer_list_item ')]")?
+            .Where(node => node.Name == "a" && HasClass(node, "wgg-list-card")
+                || node.Name == "div" && HasClass(node, "wgg_card"))
+            .ToList();
     }
 
     protected override Uri ParseResultLink(HtmlNode result)
     {
-        var nodes = result.SelectNodes(".//h3/a");
-        if (nodes == null)
-        {
-            return null;
-        }
-        
-        var link = nodes
-            .Select(n => n.Attributes.SingleOrDefault(a => a.Name == "href"))
-            .Where(l => l is not null)
-            .Select(l => 
-            {
-                var url = l.Value;
-                if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    return new Uri(url);
-                }
-                return new Uri($"{BaseUrl}{url}");
-            })
-            .FirstOrDefault();
-        return link;
+        var href = result.Name == "a" ? result.GetAttributeValue("href", null)
+            : result.SelectSingleNode(".//h3/a[@href]")?.GetAttributeValue("href", null);
+        var link = ResolveLink(BaseUrl, href);
+        return link != null && Regex.IsMatch(link.AbsolutePath, @"^/(?!.*\.\d+\.\d+\.\d+\.\d+\.html$)[^/]+\.\d+\.html$", RegexOptions.CultureInvariant) ? link : null;
     }
 
     protected override string ParseResultDate(HtmlNode result)
     {
+        var onlineIcon = result.Descendants("span").FirstOrDefault(node => HasClass(node, "online-since-icon"));
+        if (onlineIcon != null)
+        {
+            var date = ReadText(onlineIcon.SelectSingleNode("following-sibling::span[1]"));
+            return date.Length == 0 ? "" : "Online: " + date;
+        }
+
         var dateNode = result
             .SelectNodes(".//div/span")?
             .FirstOrDefault(s => s.InnerText.Contains("Online:"));
@@ -92,14 +89,15 @@ public class WgGesuchtParser : ParserBase
             return null;
         }
 
-        return System.Net.WebUtility.HtmlDecode(dateNode.InnerText).Trim();
+        return ReadText(dateNode);
     }
 
     protected override string ParseResultPrice(HtmlNode result)
     {
         // Check for both decoded (€) and encoded (&euro;) forms
         // HtmlAgilityPack may or may not decode entities depending on how HTML is loaded
-        var priceNode = result
+        var priceNode = result.SelectSingleNode(".//*[contains(concat(' ', normalize-space(@class), ' '), ' price-row ')]//*[contains(concat(' ', normalize-space(@class), ' '), ' card-main-text ')]")
+            ?? result
             .SelectNodes(".//div/b")?
             .FirstOrDefault(s => s.InnerText.Contains('€') || s.InnerText.Contains("&euro;"));
 
@@ -108,34 +106,29 @@ public class WgGesuchtParser : ParserBase
             return null;
         }
 
-        return System.Net.WebUtility.HtmlDecode(priceNode.InnerText).Trim();
+        return ReadText(priceNode);
     }
 
     protected override string ParseTitle(HtmlDocument document)
     {
-        var title = document.DocumentNode
-            .SelectNodes(".//h1[@id='sliderTopTitle']")?
-            .FirstOrDefault()?
-            .InnerText
-            .Trim() ?? "";
-        return title;
+        return ReadText(document.DocumentNode.SelectSingleNode(".//h1[@id='sliderTopTitle' or contains(concat(' ', normalize-space(@class), ' '), ' detailed-view-title ')]"));
     }
 
     protected override string ParseDescriptionText(HtmlDocument document)
     {
-        var addressInfo = document.DocumentNode
+        var addressNode = document.DocumentNode.SelectSingleNode(".//a[@href='#map_container']")
+            ?? document.DocumentNode
             .SelectNodes(".//div[contains(@class, 'col-sm-4') and contains(@class, 'mb10')]")?
-            .FirstOrDefault()?
-            .InnerText
-            .Trim() ?? "";
+            .FirstOrDefault();
 
-        var description = document.DocumentNode
-            .SelectNodes(".//*[@id='freitext_0_content']")?
-            .FirstOrDefault()?
-            .InnerText
-            .Trim() ?? "";
+        var descriptionNode = document.DocumentNode.SelectSingleNode(".//*[@id='ad_description_text'] | .//*[@id='freitext_0_content']");
+        var description = ReadText(descriptionNode);
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            return "";
+        }
 
-        return addressInfo + " " + description;
+        return ReadText(addressNode) + " " + description;
     }
 
     /// <summary>
@@ -147,6 +140,16 @@ public class WgGesuchtParser : ParserBase
     {
         try
         {
+            var summary = document.DocumentNode.SelectSingleNode("//*[@id='main_column']//h1/following-sibling::h2[1]");
+            if (summary != null)
+            {
+                var match = Regex.Match(ReadText(summary), @"^([\d.]+)\s+(?:Wohnungen?|WG-Zimmer|1-Zimmer-Wohnungen?|Häuser|Haus|Angebote?)\b", RegexOptions.CultureInvariant);
+                if (match.Success && int.TryParse(match.Groups[1].Value.Replace(".", ""), out var total))
+                {
+                    return total;
+                }
+            }
+
             var titleNode = document.DocumentNode
                 .Descendants("h1")
                 .FirstOrDefault(h1 => h1.GetAttributeValue("class", "").Contains("list-view-title"));

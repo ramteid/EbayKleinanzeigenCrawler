@@ -209,6 +209,8 @@ dotnet test
 
 Tests target SessionManager behavior, SubscriptionService validation, ParserBase helpers, etc. Extend the suite when touching business logic.
 
+Parser regression tests cover current result cards and detail pages, including reordered CSS classes, duplicate cards, invalid links, pagination, and keyword filtering. When diagnosing layout changes, compare the exact search URL in a fresh browser session with the HTML received by the running bot.
+
 The alert rules have their own tests:
 
 ```bash

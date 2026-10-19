@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Monitoring;
@@ -39,7 +40,13 @@ public class KleinanzeigenParser : ParserBase
             return false;
         }
 
-        return true;
+        if (ParseResults(resultPage)?.Count > 0 || GetTotalResultCount(resultPage) == 0)
+        {
+            return true;
+        }
+
+        Logger.Warning("Search page contains neither recognized result cards nor an explicit zero result count");
+        return false;
     }
 
     protected override bool ShouldSkipResult(HtmlNode result)
@@ -47,10 +54,10 @@ public class KleinanzeigenParser : ParserBase
         var isProShopLink =
             result
                 .Descendants("div")
-                .Any(d => d.Attributes.Any(a => a.Value == "badge-hint-pro-small-srp"))
+                .Any(d => HasClass(d, "badge-hint-pro-small-srp"))
             || result
                 .Descendants("i")
-                .Any(d => d.Attributes.Any(a => a.Value.Contains("icon-feature-topad")));
+                .Any(d => HasClass(d, "icon-feature-topad"));
 
         if (isProShopLink)
         {
@@ -65,18 +72,17 @@ public class KleinanzeigenParser : ParserBase
     public override List<Uri> GetAdditionalPages(HtmlDocument document)
     {
         var additionalPages = document.DocumentNode.Descendants("a")
-            .Where(dx => dx.Attributes.Any(ab => ab.Name == "class" && ab.Value == "pagination-page"))
+            .Where(dx => HasClass(dx, "pagination-page") || dx.GetAttributeValue("rel", "") == "next"
+                || dx.GetAttributeValue("aria-label", "").StartsWith("Seite ", StringComparison.Ordinal)
+                || dx.GetAttributeValue("aria-label", "") == "Nächste")
             .SelectMany(d => d.Attributes.Where(a => a.Name == "href"))
             .Select(d => d.Value)
             .Where(l => !string.IsNullOrEmpty(l))
-            .Select(l => 
-            {
-                if (l.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    return new Uri(l);
-                }
-                return new Uri($"{BaseUrl}{l}");
-            })
+            .Select(l => ResolveLink(BaseUrl, l))
+            .Where(l => l != null && l.AbsolutePath.StartsWith("/s-", StringComparison.Ordinal)
+                && !l.AbsolutePath.StartsWith("/s-anzeige/", StringComparison.Ordinal)
+                && Regex.IsMatch(l.AbsolutePath, @"/seite:\d+/", RegexOptions.CultureInvariant))
+            .Distinct()
             .ToList();
         return additionalPages;
     }
@@ -86,48 +92,28 @@ public class KleinanzeigenParser : ParserBase
         return resultPage.DocumentNode
             .SelectNodes("//ul[@id='srchrslt-adtable']")?
             .Descendants("article")
-            .Where(div => div.GetAttributeValue("class", "").Contains("aditem"))
+            .Where(article => HasClass(article, "aditem") || article.Attributes["data-adid"] != null)
             .ToList();
     }
 
     protected override Uri ParseResultLink(HtmlNode result)
     {
-        var link = result
-            .SelectNodes("div[@class='aditem-image']//a")?
-            .Select(n => n.Attributes.SingleOrDefault(a => a.Name == "href"))
-            .Where(l => l is not null)
-            .Select(l => 
-            {
-                var url = l.Value;
-                if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    return new Uri(url);
-                }
-                return new Uri($"{BaseUrl}{url}");
-            })
-            .FirstOrDefault();
-
-        return link;
+        var href = result.GetAttributeValue("data-href", null)
+            ?? result.SelectSingleNode(".//h3//a[@href] | .//div[contains(concat(' ', normalize-space(@class), ' '), ' aditem-image ')]//a[@href]")?.GetAttributeValue("href", null);
+        var link = ResolveLink(BaseUrl, href);
+        return link?.AbsolutePath.StartsWith("/s-anzeige/", StringComparison.Ordinal) == true ? link : null;
     }
 
     protected override string ParseResultDate(HtmlNode result)
     {
-        var date = result
-            .SelectNodes("div/div/div[@class='aditem-main--top--right']")?
-            .Select(d => d.InnerText)
-            .SingleOrDefault()?
-            .Trim();
-        return date;
+        return ReadText(result.SelectSingleNode(".//time | .//*[contains(concat(' ', normalize-space(@class), ' '), ' aditem-main--top--right ')]"));
     }
 
     protected override string ParseResultPrice(HtmlNode result)
     {
-        var price = result
-            .SelectNodes("div/div/div/p[@class='aditem-main--middle--price-shipping--price']")?
-            .Select(d => d.InnerText)
-            .SingleOrDefault()?
-            .Trim();
-        return price;
+        return ReadText(result.Descendants("p").FirstOrDefault(node =>
+            HasClass(node, "aditem-main--middle--price-shipping--price")
+            || HasClass(node, "text-title3") && HasClass(node, "font-strong") && HasClass(node, "text-secondary")));
     }
 
     protected override string ParseTitle(HtmlDocument document)
@@ -138,20 +124,17 @@ public class KleinanzeigenParser : ParserBase
             return null;
         }
 
-        var titleNode = document.DocumentNode
-            .Descendants("h1")
-            .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-title"));
+        var titleNode = document.DocumentNode.SelectSingleNode("//h1[@id='viewad-title']");
 
-        return titleNode != null ? System.Net.WebUtility.HtmlDecode(titleNode.InnerText).Trim() : null;
+        return ReadText(titleNode);
     }
 
     protected override string ParseDescriptionText(HtmlDocument document)
     {
         var descriptionNode = document.DocumentNode
-            .Descendants("p")
-            .SingleOrDefault(div => div.GetAttributeValue("id", "").Contains("viewad-description-text"));
+            .SelectSingleNode("//*[@id='viewad-description-text']");
 
-        return descriptionNode != null ? System.Net.WebUtility.HtmlDecode(descriptionNode.InnerText).Trim() : null;
+        return ReadText(descriptionNode);
     }
 
     /// <summary>
@@ -164,7 +147,8 @@ public class KleinanzeigenParser : ParserBase
     {
         try
         {
-            var breadcrumbNode = document.DocumentNode
+            var breadcrumbNode = document.DocumentNode.SelectSingleNode("//*[@id='srp-breadcrumb-summary']")
+                ?? document.DocumentNode
                 .Descendants("span")
                 .FirstOrDefault(span => span.GetAttributeValue("class", "").Contains("breadcrump-summary"));
 
@@ -174,19 +158,23 @@ public class KleinanzeigenParser : ParserBase
                 return null;
             }
 
-            var text = breadcrumbNode.InnerText; // e.g., "1 - 25 von 47.981 Ergebnissen für „pc spiele" in Deutschland"
+            var text = ReadText(breadcrumbNode); // e.g., "1 - 25 von 47.981 Ergebnissen für „pc spiele" in Deutschland"
+            if (text.StartsWith("Es wurden keine Ergebnisse", StringComparison.Ordinal))
+            {
+                return 0;
+            }
             
-            // Extract the number after "von" and before "Ergebnis" or "Ergebnissen"
+            // Extract the number after "von" and before the result or category label
             var vonIndex = text.IndexOf("von", StringComparison.OrdinalIgnoreCase);
-            var ergebnisIndex = text.IndexOf("Ergebnis", StringComparison.OrdinalIgnoreCase);
+            var resultLabelIndex = vonIndex < 0 ? -1 : text.IndexOf(' ', Math.Min(vonIndex + 4, text.Length));
             
-            if (vonIndex == -1 || ergebnisIndex == -1 || vonIndex >= ergebnisIndex)
+            if (vonIndex == -1 || resultLabelIndex == -1 || vonIndex >= resultLabelIndex)
             {
                 Logger.Warning($"Could not parse breadcrumb format: {text}");
                 return null;
             }
 
-            var length = ergebnisIndex - vonIndex - 3;
+            var length = resultLabelIndex - vonIndex - 3;
             if (length < 0)
             {
                 Logger.Warning($"Invalid substring bounds in breadcrumb: {text}");

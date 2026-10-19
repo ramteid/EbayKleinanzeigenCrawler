@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Text.RegularExpressions;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Models;
 using KleinanzeigenCrawler.Monitoring;
@@ -60,6 +62,40 @@ public abstract class ParserBase : IParser
     /// </summary>
     public abstract int? GetTotalResultCount(HtmlDocument document);
 
+    protected static bool HasClass(HtmlNode node, string className) =>
+        node.GetAttributeValue("class", "")
+            .Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
+            .Contains(className, StringComparer.Ordinal);
+
+    protected static string ReadText(HtmlNode node) => node == null ? "" :
+        Regex.Replace(WebUtility.HtmlDecode(ReadNodeText(node)), @"\s+", " ").Trim();
+
+    private static string ReadNodeText(HtmlNode node)
+    {
+        if (node.NodeType == HtmlNodeType.Text) return node.InnerText;
+        if (node.Name is "script" or "style" or "noscript" || node.NodeType == HtmlNodeType.Comment) return "";
+
+        var text = string.Concat(node.ChildNodes.Select(ReadNodeText));
+        // Block boundaries and line breaks separate words; inline formatting does not.
+        return node.Name is "br" or "div" or "p" or "li" or "h1" or "h2" or "h3" ? " " + text + " " : text;
+    }
+
+    protected static Uri ResolveLink(string baseUrl, string href)
+    {
+        var baseUri = new Uri(baseUrl);
+        if (string.IsNullOrWhiteSpace(href)
+            || !Uri.TryCreate(baseUri, WebUtility.HtmlDecode(href), out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !uri.IsDefaultPort
+            || uri.Host != baseUri.Host
+            || uri.UserInfo.Length > 0)
+        {
+            return null;
+        }
+
+        return uri;
+    }
+
     public IEnumerable<Result> ParseLinks(HtmlDocument resultPage)
     {
         var providerName = GetType().Name.Replace("Parser", "");
@@ -89,6 +125,8 @@ public abstract class ParserBase : IParser
             yield break;
         }
 
+        Logger.Debug("[{Provider}] Found {Count} result cards", providerName, results.Count);
+        var seenLinks = new HashSet<Uri>();
         foreach (var result in results)
         {
             if (ShouldSkipResult(result))
@@ -111,6 +149,11 @@ public abstract class ParserBase : IParser
             {
                 Logger.Error(ex, $"[{providerName}] Exception parsing result link");
                 _metricsService?.RecordParseError(providerName, "ParseResultLinkException");
+                continue;
+            }
+
+            if (!seenLinks.Add(link))
+            {
                 continue;
             }
 
