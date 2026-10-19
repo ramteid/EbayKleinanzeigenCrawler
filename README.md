@@ -74,6 +74,10 @@ dotnet run
 
 Redis is required even outside Docker. Point `REDIS_CONNECTION_STRING` at your instance (e.g., `localhost:6379`).
 
+### 5. Dev container
+
+`.devcontainer/` provides the .NET 9 SDK and a Redis container for development (VS Code: **Dev Containers: Reopen in Container**). Put `TELEGRAM_BOT_TOKEN` and/or `SIGNAL_NUMBER` into `.env` in the repository root and start the crawler from there with `dotnet run --project KleinanzeigenCrawler`. Redis is reachable as `redis:6379`, the metrics on port 9090.
+
 ---
 
 ## 🐞 VS Code debugging

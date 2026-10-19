@@ -1,0 +1,21 @@
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/dotnet:1-9.0
+    volumes:
+      - ..:/workspaces/kleinanzeigen-crawler:cached
+    environment:
+      REDIS_CONNECTION_STRING: redis:6379,abortConnect=false
+    # Keeps the container running so that VS Code can attach to it
+    command: sleep infinity
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # The crawler exits on startup if Redis is not reachable
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5

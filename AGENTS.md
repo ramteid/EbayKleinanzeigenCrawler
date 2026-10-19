@@ -205,6 +205,8 @@ cd KleinanzeigenCrawler
 dotnet run                # requires TELEGRAM_BOT_TOKEN and/or SIGNAL_NUMBER env var
 ```
 
+The dev container (`.devcontainer/`: .NET 9 SDK plus a `redis` service) provides everything needed. Run `dotnet run --project KleinanzeigenCrawler` from the repository root there, so that `.env` is read.
+
 ### Tests
 `dotnet test` runs the unit test suite (SessionManager, SubscriptionService, Parser parsing behavior, etc.). Tests are located under `KleinanzeigenCrawler.Tests`. The alert rules are tested with `promtool test rules monitoring/alerts_test.yml` (see README).
 

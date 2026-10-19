@@ -1,9 +1,10 @@
 {
     "name": "Kleinanzeigen Crawler",
-    "dockerComposeFile": "../docker-compose.yml",
-    "service": "bot",
-    "workspaceFolder": "/app",
-    
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "dev",
+    "workspaceFolder": "/workspaces/kleinanzeigen-crawler",
+    "remoteUser": "vscode",
+
     "customizations": {
         "vscode": {
             "extensions": [
@@ -16,7 +17,6 @@
             "settings": {
                 "terminal.integrated.defaultProfile.linux": "bash",
                 "dotnet.defaultSolution": "KleinanzeigenCrawler.sln",
-                "omnisharp.useModernNet": true,
                 "editor.formatOnSave": true,
                 "files.exclude": {
                     "**/bin": true,
@@ -25,16 +25,12 @@
             }
         }
     },
-    
-    "forwardPorts": [9090, 9091, 3000, 6379, 9093],
+
+    "forwardPorts": [9090, "redis:6379"],
     "portsAttributes": {
         "9090": {"label": "Bot Metrics"},
-        "9091": {"label": "Prometheus"},
-        "3000": {"label": "Grafana"},
-        "6379": {"label": "Redis"},
-        "9093": {"label": "Alertmanager"}
+        "redis:6379": {"label": "Redis"}
     },
-    
-    "postCreateCommand": "dotnet restore",
-    "remoteUser": "root"
+
+    "postCreateCommand": "dotnet restore"
 }
