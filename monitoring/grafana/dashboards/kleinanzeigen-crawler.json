@@ -173,7 +173,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "rate(crawler_http_requests_total[1h]) * 3600",
+          "expr": "sum(rate(crawler_http_requests_total[1h])) * 3600",
           "refId": "A"
         }
       ],
@@ -423,13 +423,13 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "rate(crawler_notifications_sent_total{success=\"true\"}[1h]) * 3600",
-          "legendFormat": "Successful",
+          "expr": "sum by (channel) (rate(crawler_notifications_sent_total{success=\"true\"}[1h])) * 3600",
+          "legendFormat": "Successful ({{channel}})",
           "refId": "A"
         },
         {
-          "expr": "rate(crawler_notifications_sent_total{success=\"false\"}[1h]) * 3600",
-          "legendFormat": "Failed",
+          "expr": "sum by (channel) (rate(crawler_notifications_sent_total{success=\"false\"}[1h])) * 3600",
+          "legendFormat": "Failed ({{channel}})",
           "refId": "B"
         }
       ],
@@ -941,7 +941,8 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "100 * (rate(crawler_redis_operations_total{success=\"true\"}[1h]) / rate(crawler_redis_operations_total[1h]))",
+          "expr": "100 * sum by (operation) (rate(crawler_redis_operations_total{success=\"true\"}[1h])) / sum by (operation) (rate(crawler_redis_operations_total[1h]))",
+          "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],

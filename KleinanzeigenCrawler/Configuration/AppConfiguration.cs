@@ -5,16 +5,41 @@ namespace KleinanzeigenCrawler.Configuration;
 /// </summary>
 public class AppConfiguration
 {
+    public MessagingConfiguration Messaging { get; set; } = new();
     public TelegramConfiguration Telegram { get; set; } = new();
+    public SignalConfiguration Signal { get; set; } = new();
     public MonitoringConfiguration Monitoring { get; set; } = new();
     public CrawlerConfiguration Crawler { get; set; } = new();
+}
+
+/// <summary>
+/// Settings shared by all messengers
+/// </summary>
+public class MessagingConfiguration
+{
+    public int SessionTimeoutMinutes { get; set; } = 15;
+    public bool AllowNewUsers { get; set; } = true;
 }
 
 public class TelegramConfiguration
 {
     public string BotToken { get; set; }
-    public int SessionTimeoutMinutes { get; set; } = 15;
-    public bool AllowNewUsers { get; set; } = true;
+    public bool Enabled => !string.IsNullOrWhiteSpace(BotToken);
+}
+
+public class SignalConfiguration
+{
+    /// <summary>
+    /// Base URL of a signal-cli-rest-api instance running in json-rpc mode
+    /// </summary>
+    public string ApiUrl { get; set; } = "http://signal-api:8080";
+    
+    /// <summary>
+    /// Signal number of the bot in international format
+    /// </summary>
+    public string Number { get; set; }
+    
+    public bool Enabled => !string.IsNullOrWhiteSpace(Number);
 }
 
 public class MonitoringConfiguration

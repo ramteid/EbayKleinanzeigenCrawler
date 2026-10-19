@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using KleinanzeigenCrawler.Configuration;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Models;
+using KleinanzeigenCrawler.Monitoring;
 using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -13,55 +14,48 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using DotNetEnv;
 
 namespace KleinanzeigenCrawler.Manager;
 
 /// <summary>
 /// Modernized Telegram manager with button-based UI and simplified state management
 /// </summary>
-public class TelegramManager : IOutgoingNotifications
+public class TelegramManager : IMessenger
 {
+    private const int MaxSendAttempts = 3;
+    private const int MaxRetryAfterSeconds = 60;
+    private static readonly TimeSpan PollingErrorDelay = TimeSpan.FromSeconds(5);
+    
     private readonly ITelegramBotClient _botClient;
     private readonly ILogger _logger;
+    private readonly MetricsService _metricsService;
     private readonly SessionManager _sessionManager;
     private readonly SubscriptionService _subscriptionService;
-    private readonly ISubscriptionPersistence _subscriptionPersistence;
-    private readonly CancellationTokenSource _cancellationTokenSource;
-    private readonly AppConfiguration _config;
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly Dictionary<string, Func<UserContext, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<CallbackContext, Task>> _callbackHandlers;
     private readonly Dictionary<string, Func<UserContext, Task>> _menuButtonHandlers;
     
+    public MessengerChannel Channel => MessengerChannel.Telegram;
+    
     public TelegramManager(
+        ITelegramBotClient botClient,
         ILogger logger,
         ISubscriptionPersistence subscriptionPersistence,
         IParserProvider parserProvider,
-        AppConfiguration config = null)
+        MessagingConfiguration messaging,
+        MetricsService metricsService = null)
     {
+        _botClient = botClient;
         _logger = logger;
-        _subscriptionPersistence = subscriptionPersistence;
-        _config = config ?? ConfigurationLoader.LoadConfiguration();
-        
-        // Load environment variables
-        Env.Load();
-        var telegramBotToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
-        if (string.IsNullOrWhiteSpace(telegramBotToken))
-        {
-            throw new InvalidOperationException("Telegram Bot token was not specified. Please set TELEGRAM_BOT_TOKEN environment variable.");
-        }
-        
-        _botClient = new TelegramBotClient(telegramBotToken);
-        var sessionTimeout = TimeSpan.FromMinutes(_config.Telegram.SessionTimeoutMinutes <= 0
-            ? 15
-            : _config.Telegram.SessionTimeoutMinutes);
-        _sessionManager = new SessionManager(logger, sessionTimeout);
-        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger);
+        _metricsService = metricsService;
+        _sessionManager = new SessionManager(logger, TimeSpan.FromMinutes(messaging.SessionTimeoutMinutes));
+        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger, Channel, messaging.AllowNewUsers);
         _commandHandlers = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["/start"] = context => ShowMainMenuAsync(context.UserId, context.Session, includeWelcome: true, refreshQuickReplies: true),
+            ["/start"] = context => ShowMainMenuAsync(context.UserId, context.Session, includeWelcome: true),
             ["/help"] = context => SendHelpCardAsync(context.UserId),
-            ["/menu"] = context => ShowMainMenuAsync(context.UserId, context.Session, refreshQuickReplies: true),
+            ["/menu"] = context => ShowMainMenuAsync(context.UserId, context.Session),
             ["/cancel"] = context => CancelConversationAsync(context.UserId, context.Session)
         };
         _callbackHandlers = new(StringComparer.OrdinalIgnoreCase)
@@ -90,9 +84,10 @@ public class TelegramManager : IOutgoingNotifications
                 }
             }
         }
-        
-        // Start receiving updates
-        _cancellationTokenSource = new CancellationTokenSource();
+    }
+    
+    public void Start()
+    {
         _botClient.StartReceiving(
             updateHandler: HandleUpdateAsync,
             errorHandler: HandlePollingErrorAsync,
@@ -232,12 +227,7 @@ public class TelegramManager : IOutgoingNotifications
                 break;
                 
             case AddSubscriptionData.STEP_INCLUDE_KEYWORDS:
-                var includeKeywords = text.Split(',')
-                    .Select(k => k.Trim())
-                    .Where(k => !string.IsNullOrWhiteSpace(k))
-                    .ToList();
-                    
-                data.IncludeKeywords = includeKeywords;
+                data.IncludeKeywords = KeywordParser.Parse(text);
                 data.Step = AddSubscriptionData.STEP_EXCLUDE_KEYWORDS;
                 session.SetData("add_data", data);
                 _sessionManager.Update(session);
@@ -246,12 +236,7 @@ public class TelegramManager : IOutgoingNotifications
                 break;
                 
             case AddSubscriptionData.STEP_EXCLUDE_KEYWORDS:
-                var excludeKeywords = text.Split(',')
-                    .Select(k => k.Trim())
-                    .Where(k => !string.IsNullOrWhiteSpace(k))
-                    .ToList();
-                    
-                data.ExcludeKeywords = excludeKeywords;
+                data.ExcludeKeywords = KeywordParser.Parse(text);
                 data.Step = AddSubscriptionData.STEP_INITIAL_PULL;
                 session.SetData("add_data", data);
                 _sessionManager.Update(session);
@@ -294,10 +279,7 @@ public class TelegramManager : IOutgoingNotifications
         
         if (editStep == "include")
         {
-            var keywords = text.Split(',')
-                .Select(k => k.Trim())
-                .Where(k => !string.IsNullOrWhiteSpace(k))
-                .ToList();
+            var keywords = KeywordParser.Parse(text);
                 
             session.SetData("include_keywords", keywords);
             session.SetData("edit_step", "exclude");
@@ -307,10 +289,7 @@ public class TelegramManager : IOutgoingNotifications
         }
         else if (editStep == "exclude")
         {
-            var keywords = text.Split(',')
-                .Select(k => k.Trim())
-                .Where(k => !string.IsNullOrWhiteSpace(k))
-                .ToList();
+            var keywords = KeywordParser.Parse(text);
                 
             var includeKeywords = session.GetData<List<string>>("include_keywords");
             
@@ -387,7 +366,7 @@ public class TelegramManager : IOutgoingNotifications
         }
     }
 
-    private async Task ShowMainMenuAsync(string userId, TelegramSession session, int? messageId = null, bool includeWelcome = false, bool refreshQuickReplies = false)
+    private async Task ShowMainMenuAsync(string userId, ConversationSession session, int? messageId = null, bool includeWelcome = false)
     {
         if (session != null)
         {
@@ -404,7 +383,7 @@ public class TelegramManager : IOutgoingNotifications
         await SendQuickCommandPromptAsync(userId);
     }
     
-    private Task StartAddSubscriptionFlowAsync(string userId, TelegramSession session, int? messageId = null)
+    private Task StartAddSubscriptionFlowAsync(string userId, ConversationSession session, int? messageId = null)
     {
         if (session != null)
         {
@@ -422,7 +401,7 @@ public class TelegramManager : IOutgoingNotifications
         return SendOrEditInlineAsync(userId, messageId, MessageFormatter.FormatHelp(), KeyboardBuilder.CreateMainMenu());
     }
     
-    private async Task CancelConversationAsync(string userId, TelegramSession session, int? messageId = null)
+    private async Task CancelConversationAsync(string userId, ConversationSession session, int? messageId = null)
     {
         if (session != null)
         {
@@ -754,7 +733,7 @@ public class TelegramManager : IOutgoingNotifications
         return new UserContext(userId, _sessionManager.GetOrCreate(userId));
     }
     
-    private void ResetSession(TelegramSession session)
+    private void ResetSession(ConversationSession session)
     {
         session.State = ConversationState.Idle;
         session.ClearData();
@@ -763,21 +742,60 @@ public class TelegramManager : IOutgoingNotifications
     
     private async Task SendMessage(string userId, string message, IReplyMarkup keyboard = null, bool enablePreview = false)
     {
+        await TrySendAsync(userId, message, keyboard, enablePreview);
+    }
+    
+    /// <returns>The reason why the message could not be delivered, or null if it was delivered</returns>
+    private async Task<Exception> TrySendAsync(string userId, string message, IReplyMarkup keyboard = null, bool enablePreview = false)
+    {
         try
         {
-            await _botClient.SendMessage(
-                chatId: userId,
-                text: message,
-                parseMode: ParseMode.Html,
-                replyMarkup: keyboard,
-                linkPreviewOptions: new LinkPreviewOptions { IsDisabled = !enablePreview }
-            );
+            await DeliveryRetry.ExecuteAsync(
+                () => _botClient.SendMessage(
+                    chatId: userId,
+                    text: message,
+                    parseMode: ParseMode.Html,
+                    replyMarkup: keyboard,
+                    linkPreviewOptions: new LinkPreviewOptions { IsDisabled = !enablePreview }
+                ),
+                SelectRetryDelay,
+                MaxSendAttempts,
+                (ex, delay, attempt) => _logger.Warning(
+                    "Sending a message to {UserId} failed: {Reason} (retrying in {Delay}, attempt {Attempt} of {MaxAttempts})",
+                    userId, ex.Message, delay, attempt + 1, MaxSendAttempts));
+            return null;
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
+        {
+            // The user blocked the bot or deleted the chat. Crawling for a subscriber that cannot be notified is pointless.
+            _logger.Warning("Telegram user {UserId} cannot be reached: {Reason}", userId, ex.Message);
+            _subscriptionService.DisableAllSubscriptions(userId);
+            return ex;
         }
         catch (Exception ex)
         {
             _logger.Error(ex, $"Error sending message to {userId}");
+            return ex;
         }
     }
+    
+    // Rate limiting, server errors and network problems may go away. A message that Telegram rejected will be rejected again.
+    // ApiRequestException derives from RequestException, so it has to be matched first.
+    private static bool IsTransient(Exception exception) => exception switch
+    {
+        ApiRequestException { ErrorCode: 429 or >= 500 } => true,
+        ApiRequestException => false,
+        RequestException => true,
+        _ => false
+    };
+    
+    private static TimeSpan? SelectRetryDelay(Exception exception, int attempt) => exception switch
+    {
+        ApiRequestException { ErrorCode: 429, Parameters.RetryAfter: { } seconds } =>
+            seconds <= MaxRetryAfterSeconds ? TimeSpan.FromSeconds(seconds) : null,
+        _ when IsTransient(exception) => TimeSpan.FromSeconds(attempt),
+        _ => null
+    };
     
     private async Task EditMessage(string userId, int messageId, string message, Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard = null)
     {
@@ -801,35 +819,23 @@ public class TelegramManager : IOutgoingNotifications
     
     private async Task<bool> EnsureSubscriberExistsAsync(string userId)
     {
-        var subscribers = _subscriptionPersistence.GetSubscribers();
-        var subscriber = subscribers.FirstOrDefault(s => s.Id == userId);
-        
-        if (subscriber != null)
+        var registration = _subscriptionService.GetOrRegisterSubscriber(userId);
+        if (!registration.IsSuccess)
         {
-            return true;
-        }
-        
-        if (!_config.Telegram.AllowNewUsers)
-        {
-            _logger.Warning($"New user registration blocked for userId: {userId}");
-            await SendMessage(userId, "⛔ Sorry, new user registrations are currently disabled. Please contact the maintainer.");
+            await SendMessage(userId, MessageFormatter.FormatError(registration.ErrorMessage));
             return false;
         }
         
-        subscriber = new Subscriber
-        {
-            Id = userId
-        };
-        _subscriptionPersistence.AddSubscriber(subscriber);
-        _logger.Information($"Created new subscriber: {userId}");
-        
         // Send the quick command keyboard for new users so they have the button menu immediately
-        await SendQuickCommandPromptAsync(userId);
+        if (registration.Data.IsNew)
+        {
+            await SendQuickCommandPromptAsync(userId);
+        }
         
         return true;
     }
     
-    private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
+    private async Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
     {
         var errorMessage = exception switch
         {
@@ -838,7 +844,9 @@ public class TelegramManager : IOutgoingNotifications
         };
         
         _logger.Error(errorMessage);
-        return Task.CompletedTask;
+        
+        // Polling starts again right after the error handler returns, which floods the log while the token is invalid or the network is down
+        await Task.Delay(PollingErrorDelay, cancellationToken);
     }
     
     private static class QuickButtons
@@ -850,28 +858,37 @@ public class TelegramManager : IOutgoingNotifications
         public const string Cancel = "❌ Cancel";
     }
     
-    private sealed record UserContext(string UserId, TelegramSession Session);
+    private sealed record UserContext(string UserId, ConversationSession Session);
     
-    private sealed record CallbackContext(string UserId, int MessageId, string[] Parts, TelegramSession Session);
+    private sealed record CallbackContext(string UserId, int MessageId, string[] Parts, ConversationSession Session);
     
-    // IOutgoingNotifications implementation
-    public async Task NotifySubscribers(Subscription subscription, Result newResult)
+    public async Task<DeliveryReport> NotifyAsync(Subscription subscription, Result newResult)
     {
-        var subscribers = _subscriptionPersistence.GetSubscribers()
-            .Where(s => s.Subscriptions.Any(sub => sub.Id == subscription.Id))
-            .ToList();
-        
-        if (subscribers.Count == 0)
+        var recipients = _subscriptionService.GetRecipients(subscription);
+        if (recipients.Count == 0)
         {
-            _logger.Warning($"No subscribers found for subscription {subscription.Id}");
-            return;
+            _logger.Debug("No {Channel} recipients found for subscription {SubscriptionId}", Channel, subscription.Id);
+            return DeliveryReport.NoRecipients;
         }
         
         var message = MessageFormatter.FormatNewResult(subscription, newResult);
-        foreach (var subscriber in subscribers)
+        var delivered = 0;
+        var transientFailures = new List<Exception>();
+        foreach (var subscriber in recipients)
         {
-            await SendMessage(subscriber.Id, message, enablePreview: true);
+            var failure = await TrySendAsync(subscriber.Id, message, enablePreview: true);
+            _metricsService?.RecordNotification(Channel, failure is null);
+            if (failure is null)
+            {
+                delivered++;
+            }
+            else if (IsTransient(failure))
+            {
+                transientFailures.Add(failure);
+            }
         }
+        
+        return new DeliveryReport(delivered, transientFailures);
     }
     
     public void Dispose()

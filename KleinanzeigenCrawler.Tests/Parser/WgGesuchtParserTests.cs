@@ -2,11 +2,9 @@ using Xunit;
 using FluentAssertions;
 using KleinanzeigenCrawler.Parser.Implementations;
 using KleinanzeigenCrawler.Interfaces;
-using KleinanzeigenCrawler.Monitoring;
 using Moq;
 using Serilog;
 using HtmlAgilityPack;
-using System;
 using System.Linq;
 
 namespace KleinanzeigenCrawler.Tests.Parser;

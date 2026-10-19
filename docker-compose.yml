@@ -5,7 +5,9 @@ services:
         volumes:
           - ./data:/app/data
         environment:
-            TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+            TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+            SIGNAL_NUMBER: ${SIGNAL_NUMBER:-}
+            SIGNAL_API_URL: ${SIGNAL_API_URL:-http://signal-api:8080}
             ALLOW_NEW_USERS: ${ALLOW_NEW_USERS:-true}
             ENABLE_PROMETHEUS: ${ENABLE_PROMETHEUS:-true}
             PROMETHEUS_PORT: 9090
@@ -21,6 +23,21 @@ services:
           # The crawler exits on startup if Redis is not reachable yet
           redis:
             condition: service_healthy
+
+    # Gateway to Signal. Only started with the compose profile "signal".
+    signal-api:
+        image: bbernhard/signal-cli-rest-api:latest
+        profiles: ["signal"]
+        restart: always
+        environment:
+            MODE: json-rpc
+        volumes:
+          - kleinanzeigen-bot-signal-data:/home/.local/share/signal-cli
+        ports:
+          # Reachable from this host only. Needed once to register or link the number.
+          - "127.0.0.1:8085:8080"
+        networks:
+          - bot-network
 
     prometheus:
         image: prom/prometheus:latest
@@ -107,3 +124,5 @@ volumes:
     kleinanzeigen-bot-alertmanager-data:
     # Redis contains already processed URLs
     kleinanzeigen-bot-redis-data:
+    # Signal account keys. Losing them requires registering the number again.
+    kleinanzeigen-bot-signal-data:

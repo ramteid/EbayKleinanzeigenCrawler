@@ -8,11 +8,11 @@ using Serilog;
 namespace KleinanzeigenCrawler.Manager;
 
 /// <summary>
-/// Manages Telegram conversation sessions with automatic cleanup of expired sessions
+/// Manages conversation sessions with automatic cleanup of expired sessions
 /// </summary>
 public class SessionManager : IDisposable
 {
-    private readonly ConcurrentDictionary<string, TelegramSession> _sessions = new();
+    private readonly ConcurrentDictionary<string, ConversationSession> _sessions = new();
     private readonly ILogger _logger;
     private readonly TimeSpan _sessionTimeout;
     private readonly Timer _cleanupTimer;
@@ -34,9 +34,9 @@ public class SessionManager : IDisposable
     /// <summary>
     /// Gets an existing session or creates a new one for the user
     /// </summary>
-    public TelegramSession GetOrCreate(string userId)
+    public ConversationSession GetOrCreate(string userId)
     {
-        var session = _sessions.GetOrAdd(userId, id => new TelegramSession(id));
+        var session = _sessions.GetOrAdd(userId, id => new ConversationSession(id));
         session.UpdateActivity();
         return session;
     }
@@ -44,7 +44,7 @@ public class SessionManager : IDisposable
     /// <summary>
     /// Updates an existing session
     /// </summary>
-    public void Update(TelegramSession session)
+    public void Update(ConversationSession session)
     {
         if (session == null) return;
         
@@ -57,7 +57,7 @@ public class SessionManager : IDisposable
     /// </summary>
     public void EndSession(string userId)
     {
-        if (_sessions.TryRemove(userId, out var session))
+        if (_sessions.TryRemove(userId, out _))
         {
             _logger.Information($"Session ended for user {userId}");
         }
@@ -68,7 +68,7 @@ public class SessionManager : IDisposable
     /// </summary>
     public void CleanupExpiredSessions()
     {
-        var cutoffTime = DateTime.Now - _sessionTimeout;
+        var cutoffTime = DateTime.UtcNow - _sessionTimeout;
         var expiredSessions = _sessions
             .Where(kvp => kvp.Value.LastActivity < cutoffTime)
             .Select(kvp => kvp.Key)

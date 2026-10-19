@@ -1,3 +1,4 @@
+using KleinanzeigenCrawler.Models;
 using Prometheus;
 using System;
 
@@ -22,7 +23,7 @@ public class MetricsService
         "Total number of notifications sent to subscribers",
         new CounterConfiguration
         {
-            LabelNames = ["success"]
+            LabelNames = ["channel", "success"]
         });
     
     private static readonly Counter ParseErrorsTotal = Metrics.CreateCounter(
@@ -93,7 +94,7 @@ public class MetricsService
     // Counter methods
     public void RecordHttpRequest(string provider, int statusCode, bool success)
     {
-        HttpRequestsTotal.WithLabels(provider, statusCode.ToString(), success.ToString()).Inc();
+        HttpRequestsTotal.WithLabels(provider, statusCode.ToString(), ToLabel(success)).Inc();
     }
     
     public void RecordParseError(string provider, string errorType)
@@ -108,12 +109,17 @@ public class MetricsService
     
     public void RecordRedisOperation(string operation, bool success)
     {
-        RedisOperationsTotal.WithLabels(operation, success.ToString()).Inc();
+        RedisOperationsTotal.WithLabels(operation, ToLabel(success)).Inc();
     }
     
     public void RecordSubscriptionProcessed(string provider, bool success)
     {
-        SubscriptionsProcessedTotal.WithLabels(provider, success.ToString()).Inc();
+        SubscriptionsProcessedTotal.WithLabels(provider, ToLabel(success)).Inc();
+    }
+    
+    public void RecordNotification(MessengerChannel channel, bool success)
+    {
+        NotificationsSentTotal.WithLabels(channel.ToString().ToLowerInvariant(), ToLabel(success)).Inc();
     }
     
     // Gauge methods
@@ -138,4 +144,7 @@ public class MetricsService
     {
         ResultsPerSubscription.Observe(count);
     }
+    
+    // The dashboards and alert rules select on the lowercase label values
+    private static string ToLabel(bool value) => value ? "true" : "false";
 }

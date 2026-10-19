@@ -1,10 +1,7 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Monitoring;
@@ -22,18 +19,15 @@ public class QueryExecutor : IQueryExecutor, IDisposable
     private readonly IUserAgentProvider _userAgentProvider;
     private readonly ILogger _logger;
     private readonly MetricsService _metricsService;
-    private readonly string _dataPath;
     private string _invalidHtml;
     private readonly HttpClient _httpClient;
 
-    public QueryExecutor(ILogger logger, QueryCounter queryCounter, IUserAgentProvider userAgentProvider, MetricsService metricsService = null, string dataPath = "data")
+    public QueryExecutor(ILogger logger, QueryCounter queryCounter, IUserAgentProvider userAgentProvider, MetricsService metricsService = null)
     {
         _logger = logger;
         _queryCounter = queryCounter;
         _userAgentProvider = userAgentProvider;
         _metricsService = metricsService;
-        _dataPath = Path.GetFullPath(dataPath ?? "data");
-        Directory.CreateDirectory(_dataPath);
         
         // Reuse HttpClient to avoid port exhaustion
         _httpClient = new HttpClient(new HttpClientHandler
@@ -130,10 +124,7 @@ public class QueryExecutor : IQueryExecutor, IDisposable
             // Don't notify on technical errors
             if ((int)response.StatusCode < 500 || (int)response.StatusCode >= 600)
             {
-                // _logger.Warning(html.ReplaceLineEndings(""));
-                var guid = Guid.NewGuid();
-                File.WriteAllText(Path.Join(_dataPath, $"validateResponse_html_{guid}"), html);
-                File.WriteAllText(Path.Join(_dataPath, $"validateResponse_response_{guid}"), JsonSerializer.Serialize(response));
+                _logger.Warning("Unexpected response {StatusCode} for {Url}", statusCode, url);
                 _metricsService?.RecordException("QueryExecutor", "HttpRequestError");
             }
             return (null, response.StatusCode);

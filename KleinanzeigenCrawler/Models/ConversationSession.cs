@@ -4,26 +4,26 @@ using System.Collections.Generic;
 namespace KleinanzeigenCrawler.Models;
 
 /// <summary>
-/// Represents a user's conversation session with the Telegram bot.
+/// Represents a user's conversation session with one of the messenger bots.
 /// Sessions automatically expire after a period of inactivity.
 /// </summary>
-public class TelegramSession
+public class ConversationSession
 {
     public string UserId { get; set; }
     public DateTime LastActivity { get; set; }
     public ConversationState State { get; set; }
     public Dictionary<string, object> Data { get; set; } = new();
     
-    public TelegramSession(string userId)
+    public ConversationSession(string userId)
     {
         UserId = userId;
-        LastActivity = DateTime.Now;
+        LastActivity = DateTime.UtcNow;
         State = ConversationState.Idle;
     }
     
     public void UpdateActivity()
     {
-        LastActivity = DateTime.Now;
+        LastActivity = DateTime.UtcNow;
     }
     
     public T GetData<T>(string key) where T : class
@@ -54,7 +54,7 @@ public class TelegramSession
 }
 
 /// <summary>
-/// Simplified conversation states using button-driven navigation
+/// Conversation states shared by the button-driven and the text-driven messengers
 /// </summary>
 public enum ConversationState
 {
@@ -71,5 +71,15 @@ public enum ConversationState
     /// <summary>
     /// User is editing an existing subscription
     /// </summary>
-    EditingSubscription
+    EditingSubscription,
+    
+    /// <summary>
+    /// User is asked to pick one of their subscriptions for a pending action (text-driven messengers)
+    /// </summary>
+    SelectingSubscription,
+    
+    /// <summary>
+    /// User is asked to confirm the deletion of a subscription (text-driven messengers)
+    /// </summary>
+    ConfirmingDelete
 }

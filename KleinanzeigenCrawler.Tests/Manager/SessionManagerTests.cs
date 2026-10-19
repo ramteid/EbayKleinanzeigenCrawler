@@ -76,6 +76,24 @@ public class SessionManagerTests
     }
     
     [Fact]
+    public void CleanupExpiredSessions_ShouldRemoveOnlySessionsThatWereInactiveLongerThanTheTimeout()
+    {
+        // Arrange
+        var sessionManager = new SessionManager(_mockLogger.Object, System.TimeSpan.FromMilliseconds(200));
+        sessionManager.GetOrCreate("inactive");
+        sessionManager.GetOrCreate("active").SetData("marker", "kept");
+        System.Threading.Thread.Sleep(300);
+        sessionManager.GetOrCreate("active");
+
+        // Act
+        sessionManager.CleanupExpiredSessions();
+
+        // Assert
+        sessionManager.GetActiveSessionCount().Should().Be(1);
+        sessionManager.GetOrCreate("active").GetData<string>("marker").Should().Be("kept");
+    }
+    
+    [Fact]
     public void Dispose_ShouldNotThrow()
     {
         // Arrange

@@ -4,13 +4,13 @@ using KleinanzeigenCrawler.Models;
 
 namespace KleinanzeigenCrawler.Tests.Models;
 
-public class TelegramSessionTests
+public class ConversationSessionTests
 {
     [Fact]
-    public void TelegramSession_ShouldInitializeWithCorrectDefaults()
+    public void ConversationSession_ShouldInitializeWithCorrectDefaults()
     {
         // Arrange & Act
-        var session = new TelegramSession("test_user");
+        var session = new ConversationSession("test_user");
         
         // Assert
         session.UserId.Should().Be("test_user");
@@ -20,10 +20,21 @@ public class TelegramSessionTests
     }
     
     [Fact]
+    public void ConversationSession_ShouldTrackActivityInUtc()
+    {
+        // Arrange & Act
+        var session = new ConversationSession("test_user");
+        session.UpdateActivity();
+
+        // Assert
+        session.LastActivity.Kind.Should().Be(System.DateTimeKind.Utc);
+    }
+
+    [Fact]
     public void UpdateActivity_ShouldUpdateLastActivityTime()
     {
         // Arrange
-        var session = new TelegramSession("test_user");
+        var session = new ConversationSession("test_user");
         var initialTime = session.LastActivity;
         System.Threading.Thread.Sleep(10); // Small delay
         
@@ -38,7 +49,7 @@ public class TelegramSessionTests
     public void GetData_ShouldReturnNullForNonExistentKey()
     {
         // Arrange
-        var session = new TelegramSession("test_user");
+        var session = new ConversationSession("test_user");
         
         // Act
         var result = session.GetData<string>("non_existent");
@@ -51,7 +62,7 @@ public class TelegramSessionTests
     public void SetData_AndGetData_ShouldWorkCorrectly()
     {
         // Arrange
-        var session = new TelegramSession("test_user");
+        var session = new ConversationSession("test_user");
         var testData = new AddSubscriptionData { Title = "Test" };
         
         // Act
@@ -67,7 +78,7 @@ public class TelegramSessionTests
     public void ClearData_ShouldResetData()
     {
         // Arrange
-        var session = new TelegramSession("test_user");
+        var session = new ConversationSession("test_user");
         session.SetData("key1", "value1");
         session.SetData("key2", "value2");
         

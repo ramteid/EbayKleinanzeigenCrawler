@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using KleinanzeigenCrawler.Configuration;
 using KleinanzeigenCrawler.Interfaces;
@@ -9,40 +10,61 @@ using KleinanzeigenCrawler.Parser;
 using KleinanzeigenCrawler.Parser.Implementations;
 using KleinanzeigenCrawler.Persistence;
 using KleinanzeigenCrawler.Query;
+using KleinanzeigenCrawler.Signal;
 using KleinanzeigenCrawler.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using Prometheus;
 using Serilog;
+using Telegram.Bot;
 
 namespace KleinanzeigenCrawler;
 
 public class Program
 {
-    private static async Task Main(string[] _)
+    private static async Task<int> Main(string[] _)
     {
         // Load configuration
-        var config = ConfigurationLoader.LoadConfiguration();
+        AppConfiguration config;
+        try
+        {
+            config = ConfigurationLoader.LoadConfiguration();
+        }
+        catch (InvalidOperationException e)
+        {
+            Console.Error.WriteLine($"Invalid configuration: {e.Message}");
+            return 1;
+        }
         
-        var serviceCollection = ConfigureServices(config);
-
-        var logger = serviceCollection.GetService<ILogger>();
-        var handler = serviceCollection.GetService<SubscriptionHandler>();
+        using var serviceProvider = ConfigureServices(config);
+        var logger = serviceProvider.GetRequiredService<ILogger>();
 
         try
         {
+            var handler = serviceProvider.GetRequiredService<SubscriptionHandler>();
+            var messengers = serviceProvider.GetServices<IMessenger>().ToList();
+
             // Start Prometheus metrics server if enabled
             if (config.Monitoring.EnablePrometheus)
             {
                 var metricServer = new KestrelMetricServer(port: config.Monitoring.PrometheusPort);
                 metricServer.Start();
-                logger!.Information($"Prometheus metrics server started on port {config.Monitoring.PrometheusPort}");
+                logger.Information($"Prometheus metrics server started on port {config.Monitoring.PrometheusPort}");
             }
 
-            await handler!.ProcessAllSubscriptionsAsync();
+            foreach (var messenger in messengers)
+            {
+                messenger.Start();
+            }
+
+            logger.Information("Running messengers: {Channels}", string.Join(", ", messengers.Select(m => m.Channel)));
+
+            await handler.ProcessAllSubscriptionsAsync();
+            return 0;
         }
         catch (Exception e)
         {
-            logger!.Error(e, "Exception terminated application");
+            logger.Error(e, "Exception terminated application");
+            return 1;
         }
     }
 
@@ -94,8 +116,7 @@ public class Program
             sp.GetService<ILogger>(),
             sp.GetService<QueryCounter>(),
             sp.GetService<IUserAgentProvider>(),
-            sp.GetService<MetricsService>(),
-            config.Crawler.DataPath));
+            sp.GetService<MetricsService>()));
 
         // Parsers
         serviceCollection.AddTransient<KleinanzeigenParser>(sp => new KleinanzeigenParser(
@@ -109,24 +130,36 @@ public class Program
         serviceCollection.AddSingleton<IParserProvider, ParserProvider>();
 
         // Business services
-        serviceCollection.AddSingleton<SubscriptionService>();
         serviceCollection.AddTransient<SubscriptionHandler>();
         
-        // Notification manager
-        serviceCollection.AddSingleton(SelectNotificationManager());
+        // Messengers: all configured messengers run simultaneously and notify their own subscribers
+        if (config.Telegram.Enabled)
+        {
+            serviceCollection.AddSingleton<IMessenger>(sp => new TelegramManager(
+                new TelegramBotClient(config.Telegram.BotToken),
+                sp.GetRequiredService<ILogger>(),
+                sp.GetRequiredService<ISubscriptionPersistence>(),
+                sp.GetRequiredService<IParserProvider>(),
+                config.Messaging,
+                sp.GetRequiredService<MetricsService>()));
+        }
+        
+        if (config.Signal.Enabled)
+        {
+            serviceCollection.AddSingleton<ISignalClient>(sp => new SignalRestClient(
+                config.Signal,
+                sp.GetRequiredService<ILogger>()));
+            serviceCollection.AddSingleton<IMessenger>(sp => new SignalManager(
+                sp.GetRequiredService<ISignalClient>(),
+                sp.GetRequiredService<ILogger>(),
+                sp.GetRequiredService<ISubscriptionPersistence>(),
+                sp.GetRequiredService<IParserProvider>(),
+                config.Messaging,
+                sp.GetRequiredService<MetricsService>()));
+        }
+        
+        serviceCollection.AddSingleton<IOutgoingNotifications, CompositeNotifier>();
 
         return serviceCollection.BuildServiceProvider();
-    }
-
-    private static Func<IServiceProvider, IOutgoingNotifications> SelectNotificationManager()
-    {
-        // Always use Telegram with modernized UI (button-based)
-        Console.WriteLine("Notification manager: Telegram (Modernized UI)");
-        return s => new TelegramManager(
-            s.GetService<ILogger>(),
-            s.GetService<ISubscriptionPersistence>(),
-            s.GetService<IParserProvider>(),
-            s.GetService<AppConfiguration>()
-        );
     }
 }

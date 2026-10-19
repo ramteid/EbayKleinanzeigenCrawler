@@ -9,6 +9,7 @@ using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace KleinanzeigenCrawler.Tests.Persistence;
@@ -236,10 +237,93 @@ public class SubscriptionPersistenceTests
         subscribers.Single(s => s.Id == "user2").Subscriptions.Should().HaveCount(1);
     }
     
+    [Fact]
+    public void AddSubscriber_ShouldKeepSubscribersWithSameIdOnDifferentChannelsSeparate()
+    {
+        // Arrange
+        var persistence = CreatePersistence();
+        
+        // Act
+        persistence.AddSubscriber(new Subscriber { Id = "42", Channel = MessengerChannel.Telegram });
+        persistence.AddSubscriber(new Subscriber { Id = "42", Channel = MessengerChannel.Signal });
+        
+        // Assert
+        persistence.GetSubscribers().Select(s => s.Channel)
+            .Should().BeEquivalentTo(new[] { MessengerChannel.Telegram, MessengerChannel.Signal });
+    }
+    
+    [Fact]
+    public void UpdateSubscriber_ShouldOnlyReplaceSubscriberOfSameChannel()
+    {
+        // Arrange
+        var persistence = CreatePersistence();
+        persistence.AddSubscriber(new Subscriber { Id = "42", Channel = MessengerChannel.Telegram });
+        persistence.AddSubscriber(new Subscriber { Id = "42", Channel = MessengerChannel.Signal });
+        
+        // Act
+        persistence.UpdateSubscriber(new Subscriber
+        {
+            Id = "42",
+            Channel = MessengerChannel.Signal,
+            Subscriptions = new List<Subscription> { new Subscription { Title = "Signal only", QueryUrl = new Uri("https://example.com") } }
+        });
+        
+        // Assert
+        var subscribers = persistence.GetSubscribers();
+        subscribers.Single(s => s.Channel == MessengerChannel.Telegram).Subscriptions.Should().BeEmpty();
+        subscribers.Single(s => s.Channel == MessengerChannel.Signal).Subscriptions.Should().ContainSingle();
+    }
+    
+    [Fact]
+    public void RestoreData_ShouldNotMergeSubscribersOfDifferentChannels()
+    {
+        // Arrange
+        _fakeStorage.SubscribersToLoad = new ConcurrentBag<Subscriber>
+        {
+            new Subscriber { Id = "42", Channel = MessengerChannel.Telegram },
+            new Subscriber { Id = "42", Channel = MessengerChannel.Signal }
+        };
+        
+        // Act
+        var persistence = CreatePersistence();
+        
+        // Assert
+        persistence.GetSubscribers().Should().HaveCount(2);
+    }
+    
+    [Fact]
+    public void RestoreData_ShouldStartEmptyWhenTheSubscriberFileDoesNotExist()
+    {
+        // Arrange
+        _fakeStorage.LoadException = new FileNotFoundException("Subscribers.json");
+
+        // Act
+        var persistence = CreatePersistence();
+
+        // Assert
+        persistence.GetSubscribers().Should().BeEmpty();
+    }
+    
+    [Fact]
+    public void RestoreData_ShouldFailInsteadOfStartingEmptyWhenTheSubscriberFileCannotBeLoaded()
+    {
+        // Arrange
+        _fakeStorage.LoadException = new InvalidDataException("Unexpected character");
+
+        // Act
+        var act = CreatePersistence;
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Subscribers.json*cannot be loaded*")
+            .WithInnerException<InvalidDataException>();
+    }
+    
     // Fake implementation for testing without real I/O
     private class FakeDataStorage : IDataStorage
     {
         public ConcurrentBag<Subscriber> SubscribersToLoad { get; set; }
+        public Exception LoadException { get; set; }
         
         public void Save<T>(T data, string fileName)
         {
@@ -251,6 +335,11 @@ public class SubscriptionPersistenceTests
         
         public void Load<T>(string fileName, out T data)
         {
+            if (LoadException != null)
+            {
+                throw LoadException;
+            }
+            
             if (typeof(T) == typeof(ConcurrentBag<Subscriber>))
             {
                 data = (T)(object)SubscribersToLoad;

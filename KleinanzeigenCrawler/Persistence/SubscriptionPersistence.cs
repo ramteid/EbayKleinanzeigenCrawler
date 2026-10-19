@@ -15,7 +15,7 @@ public class SubscriptionPersistence : ISubscriptionPersistence
     private readonly ILogger _logger;
     private readonly IDataStorage _dataStorage;
     private readonly string _dataDirectory;
-    private ConcurrentDictionary<string, Subscriber> _subscribers = new();
+    private ConcurrentDictionary<(MessengerChannel Channel, string Id), Subscriber> _subscribers = new();
     private static readonly object _lock = new();
 
     public SubscriptionPersistence(ILogger logger, IDataStorage dataStorage, AppConfiguration configuration)
@@ -27,11 +27,11 @@ public class SubscriptionPersistence : ISubscriptionPersistence
         Directory.CreateDirectory(_dataDirectory);
         
         // Initialize to empty dictionary before attempting restore
-        _subscribers = new ConcurrentDictionary<string, Subscriber>();
+        _subscribers = new ConcurrentDictionary<(MessengerChannel Channel, string Id), Subscriber>();
         RestoreData();
     }
 
-    private bool RestoreData()
+    private void RestoreData()
     {
         lock(_lock)
         {
@@ -43,7 +43,7 @@ public class SubscriptionPersistence : ISubscriptionPersistence
                 // Convert to dictionary for thread-safe operations
                 var mergedSubscribers = data
                     .Where(s => !string.IsNullOrWhiteSpace(s?.Id))
-                    .GroupBy(s => s.Id)
+                    .GroupBy(KeyOf)
                     .Select(group =>
                     {
                         var deduplicatedSubscriptions = group
@@ -54,7 +54,7 @@ public class SubscriptionPersistence : ISubscriptionPersistence
                                 var subs = subscriptionGroup.ToList();
                                 if (subs.Count > 1)
                                 {
-                                    _logger.Warning($"Found {subs.Count} subscriptions with duplicate ID {subscriptionGroup.Key} for user {group.Key}. Using most recent. Titles: {string.Join(", ", subs.Select(s => $"'{s.Title}'"))}");
+                                    _logger.Warning($"Found {subs.Count} subscriptions with duplicate ID {subscriptionGroup.Key} for user {group.Key.Id} ({group.Key.Channel}). Using most recent. Titles: {string.Join(", ", subs.Select(s => $"'{s.Title}'"))}");
                                 }
                                 return subscriptionGroup.Last();
                             })
@@ -62,37 +62,27 @@ public class SubscriptionPersistence : ISubscriptionPersistence
 
                         return new Subscriber
                         {
-                            Id = group.Key,
+                            Id = group.Key.Id,
+                            Channel = group.Key.Channel,
                             Subscriptions = deduplicatedSubscriptions
                         };
                     })
-                    .ToDictionary(s => s.Id, s => s);
+                    .ToDictionary(KeyOf);
 
-                _subscribers = new ConcurrentDictionary<string, Subscriber>(mergedSubscribers);
+                _subscribers = new ConcurrentDictionary<(MessengerChannel Channel, string Id), Subscriber>(mergedSubscribers);
                 _logger.Information($"Restored data: {data.Count} Subscribers (merged into {mergedSubscribers.Count})");
+            }
+            catch (FileNotFoundException e)
+            {
+                _logger.Warning($"Could not restore subscribers: {e.Message}");
             }
             catch (Exception e)
             {
-                if (e is FileNotFoundException)
-                {
-                    _logger.Warning($"Could not restore subscribers: {e.Message}");
-                }
-                else
-                {
-                    _logger.Error(e, $"Error when restoring subscribers: {e.Message}");
-                    _logger.Error($"CRITICAL: Failed to load subscriber data. Existing users may be unable to access the bot. Please check the Subscribers.json file for corruption or encoding issues.");
-                }
-
-                // Ensure _subscribers is always initialized
-                if (_subscribers == null)
-                {
-                    _subscribers = new ConcurrentDictionary<string, Subscriber>();
-                }
-                return false;
+                // Continuing with an empty list would overwrite the unreadable file with the next change and lose all subscribers
+                throw new InvalidOperationException(
+                    $"The subscriber file {GetSubscriberFilePath()} exists but cannot be loaded. Repair or remove it before starting the application.", e);
             }
         }
-
-        return true;
     }
 
     private void SaveData()
@@ -108,7 +98,7 @@ public class SubscriptionPersistence : ISubscriptionPersistence
     {
         lock(_lock)
         {
-            _subscribers.TryAdd(subscriber.Id, subscriber);
+            _subscribers.TryAdd(KeyOf(subscriber), subscriber);
             SaveData();
         }
     }
@@ -165,10 +155,12 @@ public class SubscriptionPersistence : ISubscriptionPersistence
     {
         lock(_lock)
         {
-            _subscribers.AddOrUpdate(subscriber.Id, subscriber, (key, existing) => subscriber);
+            _subscribers.AddOrUpdate(KeyOf(subscriber), subscriber, (key, existing) => subscriber);
             SaveData();
         }
     }
+
+    private static (MessengerChannel Channel, string Id) KeyOf(Subscriber subscriber) => (subscriber.Channel, subscriber.Id);
 
     private string GetSubscriberFilePath() => Path.Join(_dataDirectory, "Subscribers.json");
 }
