@@ -1,6 +1,6 @@
 # Kleinanzeigen Crawler
 
-Modern .NET 8 crawler that watches classified ads on **kleinanzeigen.de** and **wg-gesucht.de**, filters the results using customizable keywords, and notifies subscribers through Telegram (button-based UI) and Signal (text-based UI), which can run at the same time. Prometheus + Grafana dashboards and Alertmanager integrations provide full observability.
+Modern .NET 9 crawler that watches classified ads on **kleinanzeigen.de** and **wg-gesucht.de**, filters the results using customizable keywords, and notifies subscribers through Telegram (button-based UI) and Signal (text-based UI), which can run at the same time. Prometheus + Grafana dashboards and Alertmanager integrations provide full observability.
 
 ---
 
@@ -30,7 +30,7 @@ Modern .NET 8 crawler that watches classified ads on **kleinanzeigen.de** and **
 ## 🚀 Quick Start
 
 ### 1. Requirements
-- Docker with Compose v2 (`docker compose`, version 2.30 or newer, the Compose secrets read environment variables) **or** .NET SDK 8.0+
+- Docker with Compose v2 (`docker compose`, version 2.30 or newer, the Compose secrets read environment variables) **or** .NET SDK 9.0+
 - At least one messenger: a Telegram Bot token from [@BotFather](https://core.telegram.org/bots#3-how-do-i-create-a-bot) and/or a dedicated Signal number (see [Signal](#signal))
 
 ### 2. Prepare environment

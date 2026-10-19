@@ -6,7 +6,7 @@ This document is written for automation agents that need a fast, accurate view o
 
 ## 1. What This Project Does
 
-Kleinanzeigen Crawler is a .NET 8 console application that:
+Kleinanzeigen Crawler is a .NET 9 console application that:
 
 - Reads subscription definitions from Telegram and Signal conversations.
 - Periodically queries Kleinanzeigen and WG-Gesucht search URLs.
