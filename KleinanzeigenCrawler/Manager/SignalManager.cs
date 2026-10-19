@@ -37,6 +37,7 @@ public sealed class SignalManager : IMessenger
         ISignalClient client,
         ILogger logger,
         ISubscriptionPersistence subscriptionPersistence,
+        IAccessAttemptPersistence accessAttemptPersistence,
         IParserProvider parserProvider,
         MessagingConfiguration messaging,
         MetricsService metricsService = null)
@@ -45,8 +46,9 @@ public sealed class SignalManager : IMessenger
         _logger = logger;
         _metricsService = metricsService;
         _sessionManager = new SessionManager(logger, TimeSpan.FromMinutes(messaging.SessionTimeoutMinutes));
-        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger, Channel, messaging.AllowNewUsers);
-        _conversation = new TextConversationHandler(_subscriptionService, _sessionManager);
+        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger, Channel);
+        var accessGate = new AccessGate(_subscriptionService, accessAttemptPersistence, messaging, logger);
+        _conversation = new TextConversationHandler(_subscriptionService, accessGate, _sessionManager);
     }
 
     public void Start()
@@ -119,7 +121,10 @@ public sealed class SignalManager : IMessenger
             {
                 _logger.Information("Signal message from {Sender}", message.SenderId);
                 var reply = await _conversation.HandleMessageAsync(message.SenderId, message.Text);
-                await TrySendAsync(message.SenderId, reply);
+                if (reply is not null)
+                {
+                    await TrySendAsync(message.SenderId, reply);
+                }
             }
             finally
             {

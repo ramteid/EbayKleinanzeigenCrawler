@@ -31,6 +31,7 @@ public class TelegramManager : IMessenger
     private readonly MetricsService _metricsService;
     private readonly SessionManager _sessionManager;
     private readonly SubscriptionService _subscriptionService;
+    private readonly AccessGate _accessGate;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly Dictionary<string, Func<UserContext, Task>> _commandHandlers;
     private readonly Dictionary<string, Func<CallbackContext, Task>> _callbackHandlers;
@@ -42,6 +43,7 @@ public class TelegramManager : IMessenger
         ITelegramBotClient botClient,
         ILogger logger,
         ISubscriptionPersistence subscriptionPersistence,
+        IAccessAttemptPersistence accessAttemptPersistence,
         IParserProvider parserProvider,
         MessagingConfiguration messaging,
         MetricsService metricsService = null)
@@ -50,7 +52,8 @@ public class TelegramManager : IMessenger
         _logger = logger;
         _metricsService = metricsService;
         _sessionManager = new SessionManager(logger, TimeSpan.FromMinutes(messaging.SessionTimeoutMinutes));
-        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger, Channel, messaging.AllowNewUsers);
+        _subscriptionService = new SubscriptionService(subscriptionPersistence, parserProvider, logger, Channel);
+        _accessGate = new AccessGate(_subscriptionService, accessAttemptPersistence, messaging, logger);
         _commandHandlers = new(StringComparer.OrdinalIgnoreCase)
         {
             ["/start"] = context => ShowMainMenuAsync(context.UserId, context.Session, includeWelcome: true),
@@ -128,14 +131,14 @@ public class TelegramManager : IMessenger
         }
         
         var userId = message.Chat.Id.ToString();
-        _logger.Information($"Message from {userId}: {messageText}");
-        
-        var context = await GetUserContextAsync(userId);
+        var context = await GetUserContextAsync(userId, messageText);
         if (context is null)
         {
             return;
         }
         
+        // Logged only after the admission, because the text of a user who is not a subscriber yet may be the access password
+        _logger.Information($"Message from {userId}: {messageText}");
         if (messageText.StartsWith("/"))
         {
             await HandleCommandAsync(context, messageText);
@@ -714,7 +717,7 @@ public class TelegramManager : IMessenger
             return null;
         }
         
-        var userContext = await GetUserContextAsync(userId);
+        var userContext = await GetUserContextAsync(userId, text: null);
         if (userContext is null)
         {
             return null;
@@ -723,11 +726,26 @@ public class TelegramManager : IMessenger
         return new CallbackContext(userContext.UserId, messageId, parts, userContext.Session);
     }
     
-    private async Task<UserContext> GetUserContextAsync(string userId)
+    /// <param name="text">The text of the message, or null if the update is not a text message</param>
+    /// <returns>The context of the user, or null if the update must not be handled any further</returns>
+    private async Task<UserContext> GetUserContextAsync(string userId, string text)
     {
-        if (!await EnsureSubscriberExistsAsync(userId))
+        var admission = _accessGate.Admit(userId, text);
+        switch (admission.Status)
         {
-            return null;
+            case AdmissionStatus.Ignored:
+                return null;
+            case AdmissionStatus.Refused:
+                await SendMessage(userId, MessageFormatter.FormatNotice(admission.Reply));
+                return null;
+            case AdmissionStatus.Granted:
+                await SendMessage(userId, MessageFormatter.FormatNotice(admission.Reply));
+                await ShowMainMenuAsync(userId, _sessionManager.GetOrCreate(userId), includeWelcome: true);
+                return null;
+            case AdmissionStatus.Registered:
+                // Send the quick command keyboard for new users so they have the button menu immediately
+                await SendQuickCommandPromptAsync(userId);
+                break;
         }
         
         return new UserContext(userId, _sessionManager.GetOrCreate(userId));
@@ -815,24 +833,6 @@ public class TelegramManager : IMessenger
             _logger.Error(ex, $"Error editing message {messageId} for {userId}");
             await SendMessage(userId, message, keyboard);
         }
-    }
-    
-    private async Task<bool> EnsureSubscriberExistsAsync(string userId)
-    {
-        var registration = _subscriptionService.GetOrRegisterSubscriber(userId);
-        if (!registration.IsSuccess)
-        {
-            await SendMessage(userId, MessageFormatter.FormatError(registration.ErrorMessage));
-            return false;
-        }
-        
-        // Send the quick command keyboard for new users so they have the button menu immediately
-        if (registration.Data.IsNew)
-        {
-            await SendQuickCommandPromptAsync(userId);
-        }
-        
-        return true;
     }
     
     private async Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)

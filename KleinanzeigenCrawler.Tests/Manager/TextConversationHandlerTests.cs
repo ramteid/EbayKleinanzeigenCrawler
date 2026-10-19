@@ -1,6 +1,7 @@
 using Xunit;
 using FluentAssertions;
 using HtmlAgilityPack;
+using KleinanzeigenCrawler.Configuration;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Manager;
 using KleinanzeigenCrawler.Models;
@@ -17,9 +18,11 @@ namespace KleinanzeigenCrawler.Tests.Manager;
 public class TextConversationHandlerTests : IDisposable
 {
     private const string User = "user-1";
+    private const string Password = "correct-horse";
     private const string SearchUrl = "https://www.kleinanzeigen.de/s-wohnung/berlin/c203l3331";
 
     private readonly InMemorySubscriptionPersistence _persistence = new();
+    private readonly InMemoryAccessAttemptPersistence _attempts = new();
     private readonly Mock<IParserProvider> _parserProvider = new();
     private readonly Mock<ILogger> _logger = new();
     private readonly List<IDisposable> _disposables = new();
@@ -33,7 +36,7 @@ public class TextConversationHandlerTests : IDisposable
         parser.SetupGet(p => p.QueryExecutor).Returns(queryExecutor.Object);
         _parserProvider.Setup(p => p.GetParser(It.IsAny<Subscription>())).Returns(parser.Object);
 
-        _handler = CreateHandler(allowNewUsers: true);
+        _handler = CreateHandler(new MessagingConfiguration());
     }
 
     public void Dispose()
@@ -41,12 +44,13 @@ public class TextConversationHandlerTests : IDisposable
         _disposables.ForEach(d => d.Dispose());
     }
 
-    private TextConversationHandler CreateHandler(bool allowNewUsers)
+    private TextConversationHandler CreateHandler(MessagingConfiguration messaging)
     {
-        var subscriptions = new SubscriptionService(_persistence, _parserProvider.Object, _logger.Object, MessengerChannel.Signal, allowNewUsers);
+        var subscriptions = new SubscriptionService(_persistence, _parserProvider.Object, _logger.Object, MessengerChannel.Signal);
+        var accessGate = new AccessGate(subscriptions, _attempts, messaging, _logger.Object);
         var sessions = new SessionManager(_logger.Object);
         _disposables.Add(sessions);
-        return new TextConversationHandler(subscriptions, sessions);
+        return new TextConversationHandler(subscriptions, accessGate, sessions);
     }
 
     private Task<string> Say(string text) => _handler.HandleMessageAsync(User, text);
@@ -113,13 +117,69 @@ public class TextConversationHandlerTests : IDisposable
     public async Task FirstMessage_ShouldBeRejectedWhenRegistrationIsClosed()
     {
         // Arrange
-        var closedHandler = CreateHandler(allowNewUsers: false);
+        var closedHandler = CreateHandler(new MessagingConfiguration { AllowNewUsers = false });
 
         // Act
         var reply = await closedHandler.HandleMessageAsync(User, "/add");
 
         // Assert
         reply.Should().Contain("registrations are currently disabled");
+        _persistence.GetSubscribers().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FirstMessage_ShouldAskForThePasswordInsteadOfHandlingTheMessage()
+    {
+        // Arrange
+        var protectedHandler = CreateHandler(new MessagingConfiguration { AccessPassword = Password });
+
+        // Act
+        var reply = await protectedHandler.HandleMessageAsync(User, "/add");
+
+        // Assert
+        reply.Should().Contain("access password").And.NotContain("Step 1 of 5");
+        _persistence.GetSubscribers().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Password_ShouldGrantAccessWelcomeTheUserAndOpenTheConversation()
+    {
+        // Arrange
+        var protectedHandler = CreateHandler(new MessagingConfiguration { AccessPassword = Password });
+        await protectedHandler.HandleMessageAsync(User, "hello");
+
+        // Act
+        var wrong = await protectedHandler.HandleMessageAsync(User, "not the password");
+        var granted = await protectedHandler.HandleMessageAsync(User, Password);
+        var addPrompt = await protectedHandler.HandleMessageAsync(User, "/add");
+
+        // Assert
+        wrong.Should().Be("Wrong password. 9 attempts left.");
+        granted.Should().StartWith("Access granted.").And.Contain("Welcome to the Kleinanzeigen Crawler");
+        _persistence.GetSubscribers().Should().ContainSingle(s => s.Id == User && s.Channel == MessengerChannel.Signal);
+        addPrompt.Should().Contain("Step 1 of 5");
+    }
+
+    [Fact]
+    public async Task BlockedUser_ShouldGetNoReplyAndNoAccessEvenWithThePassword()
+    {
+        // Arrange
+        var protectedHandler = CreateHandler(new MessagingConfiguration { AccessPassword = Password });
+        await protectedHandler.HandleMessageAsync(User, "hello");
+        string lastReply = null;
+        for (var i = 0; i < AccessGate.MaxFailedAttempts; i++)
+        {
+            lastReply = await protectedHandler.HandleMessageAsync(User, "wrong");
+        }
+
+        // Act
+        var replyWithPassword = await protectedHandler.HandleMessageAsync(User, Password);
+        var replyToCommand = await protectedHandler.HandleMessageAsync(User, "/help");
+
+        // Assert
+        lastReply.Should().Contain("blocked");
+        replyWithPassword.Should().BeNull();
+        replyToCommand.Should().BeNull();
         _persistence.GetSubscribers().Should().BeEmpty();
     }
 

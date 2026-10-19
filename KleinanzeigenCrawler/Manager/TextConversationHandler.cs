@@ -20,12 +20,14 @@ public class TextConversationHandler
     private const string NoneCommand = "/none";
 
     private readonly SubscriptionService _subscriptions;
+    private readonly AccessGate _accessGate;
     private readonly SessionManager _sessions;
     private readonly Dictionary<string, Func<ConversationSession, string>> _commands;
 
-    public TextConversationHandler(SubscriptionService subscriptions, SessionManager sessions)
+    public TextConversationHandler(SubscriptionService subscriptions, AccessGate accessGate, SessionManager sessions)
     {
         _subscriptions = subscriptions;
+        _accessGate = accessGate;
         _sessions = sessions;
         _commands = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -42,14 +44,19 @@ public class TextConversationHandler
     }
 
     /// <summary>
-    /// Handles a message of a user and returns the reply to send back
+    /// Handles a message of a user and returns the reply to send back, or null if the user is blocked and must not get an answer
     /// </summary>
     public async Task<string> HandleMessageAsync(string userId, string text)
     {
-        var registration = _subscriptions.GetOrRegisterSubscriber(userId);
-        if (!registration.IsSuccess)
+        var admission = _accessGate.Admit(userId, text);
+        switch (admission.Status)
         {
-            return PlainTextFormatter.Error(registration.ErrorMessage);
+            case AdmissionStatus.Ignored:
+                return null;
+            case AdmissionStatus.Refused:
+                return admission.Reply;
+            case AdmissionStatus.Granted:
+                return $"{admission.Reply}\n\n{PlainTextFormatter.Welcome()}";
         }
 
         var session = _sessions.GetOrCreate(userId);

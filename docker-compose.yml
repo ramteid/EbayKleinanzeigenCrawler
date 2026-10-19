@@ -9,6 +9,7 @@ services:
             SIGNAL_NUMBER: ${SIGNAL_NUMBER:-}
             SIGNAL_API_URL: ${SIGNAL_API_URL:-http://signal-api:8080}
             ALLOW_NEW_USERS: ${ALLOW_NEW_USERS:-true}
+            ACCESS_PASSWORD: ${ACCESS_PASSWORD:-}
             ENABLE_PROMETHEUS: ${ENABLE_PROMETHEUS:-true}
             PROMETHEUS_PORT: 9090
             CHECK_INTERVAL_SECONDS: 60

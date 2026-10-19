@@ -21,9 +21,11 @@ public class SignalManagerTests : IDisposable
 {
     private const string Alice = "11111111-aaaa-bbbb-cccc-000000000001";
     private const string Bob = "22222222-aaaa-bbbb-cccc-000000000002";
+    private const string Password = "correct-horse";
     private const string SearchUrl = "https://www.kleinanzeigen.de/s-wohnung/berlin/c203l3331";
 
     private readonly InMemorySubscriptionPersistence _persistence = new();
+    private readonly InMemoryAccessAttemptPersistence _accessAttempts = new();
     private readonly FakeSignalClient _client = new();
     private readonly Mock<IParserProvider> _parserProvider = new();
     private readonly Mock<IQueryExecutor> _queryExecutor = new();
@@ -37,7 +39,7 @@ public class SignalManagerTests : IDisposable
         parser.SetupGet(p => p.QueryExecutor).Returns(_queryExecutor.Object);
         _parserProvider.Setup(p => p.GetParser(It.IsAny<Subscription>())).Returns(parser.Object);
 
-        _manager = new SignalManager(_client, _logger.Object, _persistence, _parserProvider.Object, new MessagingConfiguration());
+        _manager = new SignalManager(_client, _logger.Object, _persistence, _accessAttempts, _parserProvider.Object, new MessagingConfiguration());
     }
 
     public void Dispose()
@@ -50,6 +52,9 @@ public class SignalManagerTests : IDisposable
         _manager.Start();
         await _client.ReceiveStarted;
     }
+
+    private SignalManager CreateProtectedManager() => new(
+        _client, _logger.Object, _persistence, _accessAttempts, _parserProvider.Object, new MessagingConfiguration { AccessPassword = Password });
 
     private async Task<bool> RepliesAsync(int count) => await Wait.UntilAsync(() => _client.Sent.Count >= count);
 
@@ -105,6 +110,77 @@ public class SignalManagerTests : IDisposable
         var subscriber = _persistence.GetSubscribers().Should().ContainSingle().Subject;
         subscriber.Id.Should().Be(Alice);
         subscriber.Channel.Should().Be(MessengerChannel.Signal);
+    }
+
+    [Fact]
+    public async Task IncomingMessage_ShouldAskAnUnknownSenderForThePasswordWhenOneIsConfigured()
+    {
+        // Arrange
+        using var manager = CreateProtectedManager();
+        manager.Start();
+        await _client.ReceiveStarted;
+
+        // Act
+        _client.Emit(Alice, "/add");
+
+        // Assert
+        (await RepliesAsync(1)).Should().BeTrue();
+        RepliesTo(Alice).Should().ContainSingle().Which.Should().Contain("access password").And.NotContain("Step 1 of 5");
+        _persistence.GetSubscribers().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Password_ShouldAdmitTheSenderAsSignalSubscriberOnce()
+    {
+        // Arrange
+        using var manager = CreateProtectedManager();
+        manager.Start();
+        await _client.ReceiveStarted;
+
+        // Act
+        _client.Emit(Alice, "hello");
+        _client.Emit(Alice, Password);
+        _client.Emit(Alice, "/add");
+
+        // Assert
+        (await RepliesAsync(3)).Should().BeTrue();
+        var replies = RepliesTo(Alice).ToList();
+        replies[0].Should().Contain("access password");
+        replies[1].Should().StartWith("Access granted.").And.Contain("Welcome to the Kleinanzeigen Crawler");
+        replies[2].Should().Contain("Step 1 of 5");
+        var subscriber = _persistence.GetSubscribers().Should().ContainSingle().Subject;
+        subscriber.Id.Should().Be(Alice);
+        subscriber.Channel.Should().Be(MessengerChannel.Signal);
+    }
+
+    [Fact]
+    public async Task ASenderWhoGuessedTheWrongPasswordTenTimes_ShouldNeverBeAnsweredAgain()
+    {
+        // Arrange
+        using var manager = CreateProtectedManager();
+        manager.Start();
+        await _client.ReceiveStarted;
+        _client.Emit(Alice, "hello");
+        for (var i = 0; i < AccessGate.MaxFailedAttempts; i++)
+        {
+            _client.Emit(Alice, "wrong");
+        }
+
+        await RepliesAsync(1 + AccessGate.MaxFailedAttempts);
+
+        // Act
+        _client.Emit(Alice, Password);
+        _client.Emit(Alice, "/help");
+        _client.Emit(Bob, "hello");
+        var bobAnswered = await Wait.UntilAsync(() => RepliesTo(Bob).Any());
+        await Task.Delay(200);
+
+        // Assert
+        bobAnswered.Should().BeTrue();
+        var aliceReplies = RepliesTo(Alice).ToList();
+        aliceReplies.Should().HaveCount(1 + AccessGate.MaxFailedAttempts);
+        aliceReplies.Last().Should().Contain("blocked");
+        _persistence.GetSubscribers().Should().BeEmpty();
     }
 
     [Fact]
@@ -180,7 +256,7 @@ public class SignalManagerTests : IDisposable
         // Arrange
         var failingPersistence = new Mock<ISubscriptionPersistence>();
         failingPersistence.Setup(p => p.GetSubscribers()).Throws(new InvalidOperationException("storage unavailable"));
-        using var manager = new SignalManager(_client, _logger.Object, failingPersistence.Object, _parserProvider.Object, new MessagingConfiguration());
+        using var manager = new SignalManager(_client, _logger.Object, failingPersistence.Object, _accessAttempts, _parserProvider.Object, new MessagingConfiguration());
         manager.Start();
         await _client.ReceiveStarted;
 

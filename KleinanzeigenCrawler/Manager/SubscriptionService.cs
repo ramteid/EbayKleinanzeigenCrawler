@@ -18,47 +18,40 @@ public class SubscriptionService
     private readonly IParserProvider _parserProvider;
     private readonly ILogger _logger;
     private readonly MessengerChannel _channel;
-    private readonly bool _allowNewUsers;
     
     public SubscriptionService(
         ISubscriptionPersistence persistence,
         IParserProvider parserProvider,
         ILogger logger,
-        MessengerChannel channel,
-        bool allowNewUsers)
+        MessengerChannel channel)
     {
         _persistence = persistence;
         _parserProvider = parserProvider;
         _logger = logger;
         _channel = channel;
-        _allowNewUsers = allowNewUsers;
+    }
+    
+    public MessengerChannel Channel => _channel;
+    
+    /// <summary>
+    /// Checks whether the user with the given ID is a subscriber of this channel
+    /// </summary>
+    public bool IsSubscriber(string subscriberId)
+    {
+        return FindSubscriber(subscriberId) != null;
     }
     
     /// <summary>
-    /// Gets the subscriber with the given ID and registers a new one if it does not exist yet and new users are allowed
+    /// Registers a new subscriber on this channel. Whether the user may register is decided by the caller.
     /// </summary>
-    public ServiceResult<SubscriberRegistration> GetOrRegisterSubscriber(string subscriberId)
+    public void RegisterSubscriber(string subscriberId)
     {
-        var subscriber = FindSubscriber(subscriberId);
-        if (subscriber != null)
-        {
-            return ServiceResult<SubscriberRegistration>.Ok(new SubscriberRegistration(subscriber, IsNew: false));
-        }
-        
-        if (!_allowNewUsers)
-        {
-            _logger.Warning("New {Channel} user registration blocked for userId: {UserId}", _channel, subscriberId);
-            return ServiceResult<SubscriberRegistration>.Fail("New user registrations are currently disabled. Please contact the maintainer.");
-        }
-        
-        subscriber = new Subscriber
+        _persistence.AddSubscriber(new Subscriber
         {
             Id = subscriberId,
             Channel = _channel
-        };
-        _persistence.AddSubscriber(subscriber);
+        });
         _logger.Information("Created new {Channel} subscriber: {UserId}", _channel, subscriberId);
-        return ServiceResult<SubscriberRegistration>.Ok(new SubscriberRegistration(subscriber, IsNew: true));
     }
     
     /// <summary>

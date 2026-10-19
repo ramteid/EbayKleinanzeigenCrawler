@@ -67,7 +67,7 @@ public class NotificationRetryTests : IDisposable
                 return Task.CompletedTask;
             });
 
-        _signalManager = new SignalManager(_signal, _logger.Object, _persistence, Mock.Of<IParserProvider>(), new MessagingConfiguration());
+        _signalManager = new SignalManager(_signal, _logger.Object, _persistence, new InMemoryAccessAttemptPersistence(), Mock.Of<IParserProvider>(), new MessagingConfiguration());
         var telegramStandIn = new Mock<IMessenger>();
         telegramStandIn.SetupGet(m => m.Channel).Returns(MessengerChannel.Telegram);
         telegramStandIn.Setup(m => m.NotifyAsync(It.IsAny<Subscription>(), It.IsAny<Result>())).ReturnsAsync(DeliveryReport.NoRecipients);

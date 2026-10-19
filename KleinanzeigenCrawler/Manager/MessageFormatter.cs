@@ -313,6 +313,14 @@ Everything correct? Click <b>Confirm</b> to create the subscription!";
     }
     
     /// <summary>
+    /// Formats a plain message without a heading
+    /// </summary>
+    public static string FormatNotice(string message)
+    {
+        return Encode(message);
+    }
+    
+    /// <summary>
     /// Formats an error message
     /// </summary>
     public static string FormatError(string message)

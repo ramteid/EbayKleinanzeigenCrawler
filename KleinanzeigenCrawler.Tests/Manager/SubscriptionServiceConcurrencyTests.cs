@@ -51,7 +51,7 @@ public class SubscriptionServiceConcurrencyTests : IDisposable
         parser.SetupGet(p => p.QueryExecutor).Returns(queryExecutor.Object);
         var parserProvider = new Mock<IParserProvider>();
         parserProvider.Setup(p => p.GetParser(It.IsAny<Subscription>())).Returns(parser.Object);
-        var service = new SubscriptionService(persistence, parserProvider.Object, logger, MessengerChannel.Telegram, allowNewUsers: true);
+        var service = new SubscriptionService(persistence, parserProvider.Object, logger, MessengerChannel.Telegram);
 
         using var stop = new CancellationTokenSource();
         var failures = new ConcurrentBag<Exception>();
@@ -97,7 +97,7 @@ public class SubscriptionServiceConcurrencyTests : IDisposable
         parser.SetupGet(p => p.QueryExecutor).Returns(queryExecutor.Object);
         var parserProvider = new Mock<IParserProvider>();
         parserProvider.Setup(p => p.GetParser(It.IsAny<Subscription>())).Returns(parser.Object);
-        var service = new SubscriptionService(persistence, parserProvider.Object, logger, MessengerChannel.Telegram, allowNewUsers: true);
+        var service = new SubscriptionService(persistence, parserProvider.Object, logger, MessengerChannel.Telegram);
         var created = await service.CreateSubscriptionAsync("1", "https://example.com/search", null, null, false, "First");
         var snapshot = service.GetSubscriptions("1");
 

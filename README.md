@@ -94,7 +94,7 @@ Customize the behavior through `.vscode/launch.json`, `.vscode/tasks.json`, or `
 
 Signal has no bot API. The crawler talks to a [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api) container (`signal-api`, json-rpc mode), which is part of `docker-compose.yml` behind the compose profile `signal`.
 
-1. Get a **dedicated** Signal number for the bot. Everyone who writes to that number talks to the bot, so do not use your personal number.
+1. Get a **dedicated** Signal number for the bot. Without an [access password](#access-password) everyone who writes to that number can use the bot, so do not use your personal number.
 2. Start the container: `COMPOSE_PROFILES=signal docker compose up -d signal-api`.
 3. Register the number (or link it as a secondary device) through the API on `http://127.0.0.1:8085`, see the [API documentation](https://bbernhard.github.io/signal-cli-rest-api/) (`/v1/register`, `/v1/qrcodelink`). Restart `signal-api` if it does not pick up the new account.
 4. Set `SIGNAL_NUMBER` (international format) and `COMPOSE_PROFILES=signal` in `.env`, then run `docker compose up -d`.
@@ -113,6 +113,7 @@ Users write to the number in a one-to-one chat. Commands: `/add`, `/list`, `/edi
 | `SIGNAL_NUMBER` | _optional_ | Dedicated Signal number of the bot, e.g. `+491701234567`. Signal is disabled when empty. |
 | `SIGNAL_API_URL` | `http://signal-api:8080` | Base URL of the signal-cli-rest-api container (json-rpc mode). |
 | `ALLOW_NEW_USERS` | `true` | If `false`, new users are rejected on every messenger (existing users unaffected). |
+| `ACCESS_PASSWORD` | _optional_ | Password that new users must send once, at least 8 characters, case-sensitive. See [Access password](#access-password). |
 | `ENABLE_PROMETHEUS` | `true` | Starts embedded Kestrel metrics server. |
 | `PROMETHEUS_PORT` | `9090` | Metrics listener inside the bot container. |
 | `CHECK_INTERVAL_SECONDS` | `60` | Delay between crawler passes. |
@@ -124,11 +125,21 @@ Users write to the number in a one-to-one chat. Commands: `/add`, `/list`, `/edi
 
 At least one of `TELEGRAM_BOT_TOKEN` and `SIGNAL_NUMBER` is required; with both set, both messengers run simultaneously. Unset or empty numeric and boolean variables use the default, an invalid value stops the start-up with a message. All environment variables can be set via `.env`, shell exports, or your container orchestrator.
 
+### Access password
+
+With `ACCESS_PASSWORD` set, a new user on any messenger is let in only after sending the password once:
+
+- The first message of an unknown user is answered with a request for the password and is not counted. Existing subscribers are never asked.
+- Whoever sends the password becomes a subscriber for good.
+- A user who sends a wrong password 10 times is blocked for good: the bot does not answer its messages anymore.
+- Failed attempts and blocks are stored per messenger in `./data/AccessAttempts.json`. To unblock a user, stop the bot, remove its entry from that file and start the bot again.
+- `ALLOW_NEW_USERS=false` still rejects new users, whatever the password.
+
 ---
 
 ## 🏗️ Architecture Overview
 
-1. **TelegramManager** (button UI) and **SignalManager** (text UI) + **SessionManager** (per-user state) accept subscription commands. Both run simultaneously and only notify their own subscribers.
+1. **TelegramManager** (button UI) and **SignalManager** (text UI) + **SessionManager** (per-user state) accept subscription commands once the **AccessGate** admitted the sender (optional password). Both run simultaneously and only notify their own subscribers.
 2. **SubscriptionService** validates URLs, keywords, and ensures estimated results ≤ 50.
 3. **SubscriptionPersistence** stores subscriber data in `./data/Subscribers.json`.
 4. **SubscriptionHandler** loops forever:
@@ -144,11 +155,11 @@ Key directories:
 KleinanzeigenCrawler/
   Configuration/          # AppConfiguration, loader
   Interfaces/             # Contracts (IParser, IMessenger, ISignalClient, etc.)
-  Manager/                # TelegramManager, SignalManager, TextConversationHandler, SessionManager, SubscriptionService
+  Manager/                # TelegramManager, SignalManager, TextConversationHandler, AccessGate, SessionManager, SubscriptionService
   Models/                 # Domain objects (Subscription, Subscriber, ConversationSession, Result)
   Monitoring/             # MetricsService
   Parser/                 # ParserBase, ParserProvider, concrete parsers
-  Persistence/            # JsonStorage, SubscriptionPersistence, RedisUrlTracker
+  Persistence/            # JsonStorage, SubscriptionPersistence, AccessAttemptPersistence, RedisUrlTracker
   Query/                  # QueryExecutor, QueryCounter, UserAgentProvider
   Signal/                 # SignalRestClient (signal-cli-rest-api gateway)
   Subscriptions/          # SubscriptionHandler
@@ -178,10 +189,11 @@ docker-compose.yml               # Full stack definition
 ## 💾 Data & Persistence
 
 - `./data/Subscribers.json` – subscriber data (multi-user aware).
+- `./data/AccessAttempts.json` - wrong password attempts and blocked users per messenger.
 - `./data/logfile<yyyyMMdd>.txt` – daily rolling logs, 1 MB per file, kept for 90 days.
 - Redis stores processed URL hashes (no JSON fallback).
 - Remove/backup `./data` to reset subscribers and logs; Redis data persists in the `kleinanzeigen-bot-redis-data` volume.
-- A `Subscribers.json` that exists but cannot be parsed stops the start-up instead of being overwritten. Repair or restore it first.
+- A `Subscribers.json` or `AccessAttempts.json` that exists but cannot be parsed stops the start-up instead of being overwritten. Repair or restore it first.
 
 ---
 
@@ -208,7 +220,7 @@ docker run --rm -v "$PWD:/w" -w /w --entrypoint promtool prom/prometheus:latest 
 |---------|-------|
 | Bot silent | `docker compose logs bot`, ensure the messenger settings (`TELEGRAM_BOT_TOKEN`, `SIGNAL_NUMBER`) and the Redis connection are valid. |
 | Signal bot silent | `docker compose logs bot signal-api`. The number must be registered with `signal-api`, which must run with `MODE=json-rpc`; the bot logs the reason and retries. |
-| Bot exits right after start | `docker compose logs bot`: invalid configuration values, an unreadable `Subscribers.json` or an unreachable Redis are reported before the exit. |
+| Bot exits right after start | `docker compose logs bot`: invalid configuration values, an unreadable `Subscribers.json` or `AccessAttempts.json` or an unreachable Redis are reported before the exit. |
 | Duplicate notifications | Confirm Redis is reachable; hashed URLs expire after 90 days. |
 | No metrics | `ENABLE_PROMETHEUS` must be `true`; metrics exposed on internal port `9090`. |
 | Alert spam | Inspect Grafana dashboards; adjust thresholds in `monitoring/alerts.yml`. |

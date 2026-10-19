@@ -125,6 +125,30 @@ public class ConfigurationLoaderTests
         config.Messaging.AllowNewUsers.Should().BeFalse();
     }
 
+    [Fact]
+    public void Build_ShouldReadTheAccessPasswordWithoutSurroundingWhitespace()
+    {
+        // Act
+        var config = Build(("TELEGRAM_BOT_TOKEN", "123:abc"), ("ACCESS_PASSWORD", "  correct horse\n"));
+
+        // Assert
+        config.Messaging.AccessPassword.Should().Be("correct horse");
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("1234567")]
+    [InlineData("   1234567   ")]
+    public void Build_ShouldRejectAShortAccessPasswordWithoutRevealingIt(string value)
+    {
+        // Act
+        var act = () => Build(("TELEGRAM_BOT_TOKEN", "123:abc"), ("ACCESS_PASSWORD", value));
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .Where(e => e.Message == "ACCESS_PASSWORD must have at least 8 characters");
+    }
+
     [Theory]
     [InlineData("SESSION_TIMEOUT_MINUTES", "0")]
     [InlineData("SESSION_TIMEOUT_MINUTES", "-5")]
@@ -175,12 +199,14 @@ public class ConfigurationLoaderTests
             ("CHECK_INTERVAL_SECONDS", blankValue),
             ("PROMETHEUS_PORT", blankValue),
             ("ALLOW_NEW_USERS", blankValue),
+            ("ACCESS_PASSWORD", blankValue),
             ("ENABLE_PROMETHEUS", blankValue),
             ("DATA_PATH", null));
 
         // Assert
         config.Messaging.SessionTimeoutMinutes.Should().Be(15);
         config.Messaging.AllowNewUsers.Should().BeTrue();
+        config.Messaging.AccessPassword.Should().BeNull();
         config.Crawler.CheckIntervalSeconds.Should().Be(60);
         config.Crawler.DataPath.Should().Be("data");
         config.Monitoring.PrometheusPort.Should().Be(9090);

@@ -31,11 +31,11 @@ public class SubscriptionServiceTests
         _mockPersistence = new Mock<ISubscriptionPersistence>();
         _mockParserProvider = new Mock<IParserProvider>();
         _mockLogger = new Mock<ILogger>();
-        _service = CreateService(MessengerChannel.Telegram, allowNewUsers: true);
+        _service = CreateService(MessengerChannel.Telegram);
     }
     
-    private SubscriptionService CreateService(MessengerChannel channel, bool allowNewUsers) =>
-        new(_mockPersistence.Object, _mockParserProvider.Object, _mockLogger.Object, channel, allowNewUsers);
+    private SubscriptionService CreateService(MessengerChannel channel) =>
+        new(_mockPersistence.Object, _mockParserProvider.Object, _mockLogger.Object, channel);
     
     [Fact]
     public async Task CreateSubscriptionAsync_ShouldFailWithInvalidUrl()
@@ -285,87 +285,34 @@ public class SubscriptionServiceTests
     }
     
     [Fact]
-    public void GetOrRegisterSubscriber_ShouldReturnExistingSubscriberWithoutRegistering()
-    {
-        // Arrange
-        var subscriber = new Subscriber { Id = "user1" };
-        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(new[] { subscriber });
-        
-        // Act
-        var result = _service.GetOrRegisterSubscriber("user1");
-        
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Data.Subscriber.Should().BeSameAs(subscriber);
-        result.Data.IsNew.Should().BeFalse();
-        _mockPersistence.Verify(p => p.AddSubscriber(It.IsAny<Subscriber>()), Times.Never);
-    }
-    
-    [Fact]
-    public void GetOrRegisterSubscriber_ShouldRegisterNewSubscriberOnTheServiceChannel()
-    {
-        // Arrange
-        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(Array.Empty<Subscriber>());
-        var signalService = CreateService(MessengerChannel.Signal, allowNewUsers: true);
-        
-        // Act
-        var result = signalService.GetOrRegisterSubscriber("account-1");
-        
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Data.IsNew.Should().BeTrue();
-        _mockPersistence.Verify(p => p.AddSubscriber(It.Is<Subscriber>(s =>
-            s.Id == "account-1" && s.Channel == MessengerChannel.Signal)), Times.Once);
-    }
-    
-    [Fact]
-    public void GetOrRegisterSubscriber_ShouldNotReuseSubscriberOfAnotherChannel()
+    public void IsSubscriber_ShouldMatchOnlySubscribersOfTheServiceChannel()
     {
         // Arrange
         var telegramSubscriber = new Subscriber { Id = "42", Channel = MessengerChannel.Telegram };
-        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(new[] { telegramSubscriber });
-        var signalService = CreateService(MessengerChannel.Signal, allowNewUsers: true);
+        var signalSubscriber = new Subscriber { Id = "43", Channel = MessengerChannel.Signal };
+        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(new[] { telegramSubscriber, signalSubscriber });
+        var signalService = CreateService(MessengerChannel.Signal);
         
-        // Act
-        var result = signalService.GetOrRegisterSubscriber("42");
-        
-        // Assert
-        result.IsSuccess.Should().BeTrue();
-        result.Data.IsNew.Should().BeTrue();
-        result.Data.Subscriber.Should().NotBeSameAs(telegramSubscriber);
-        result.Data.Subscriber.Channel.Should().Be(MessengerChannel.Signal);
-        _mockPersistence.Verify(p => p.AddSubscriber(result.Data.Subscriber), Times.Once);
+        // Act & Assert
+        _service.IsSubscriber("42").Should().BeTrue();
+        _service.IsSubscriber("43").Should().BeFalse();
+        signalService.IsSubscriber("43").Should().BeTrue();
+        signalService.IsSubscriber("42").Should().BeFalse();
+        _service.IsSubscriber("unknown").Should().BeFalse();
     }
     
     [Fact]
-    public void GetOrRegisterSubscriber_ShouldFailForUnknownSubscriberWhenNewUsersAreNotAllowed()
+    public void RegisterSubscriber_ShouldAddSubscriberOnTheServiceChannel()
     {
         // Arrange
-        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(Array.Empty<Subscriber>());
-        var closedService = CreateService(MessengerChannel.Telegram, allowNewUsers: false);
+        var signalService = CreateService(MessengerChannel.Signal);
         
         // Act
-        var result = closedService.GetOrRegisterSubscriber("user1");
+        signalService.RegisterSubscriber("account-1");
         
         // Assert
-        result.IsSuccess.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("registrations are currently disabled");
-        _mockPersistence.Verify(p => p.AddSubscriber(It.IsAny<Subscriber>()), Times.Never);
-    }
-    
-    [Fact]
-    public void GetOrRegisterSubscriber_ShouldStillReturnExistingSubscriberWhenNewUsersAreNotAllowed()
-    {
-        // Arrange
-        var subscriber = new Subscriber { Id = "user1" };
-        _mockPersistence.Setup(p => p.GetSubscribers()).Returns(new[] { subscriber });
-        var closedService = CreateService(MessengerChannel.Telegram, allowNewUsers: false);
-        
-        // Act
-        var result = closedService.GetOrRegisterSubscriber("user1");
-        
-        // Assert
-        result.IsSuccess.Should().BeTrue();
+        _mockPersistence.Verify(p => p.AddSubscriber(It.Is<Subscriber>(s =>
+            s.Id == "account-1" && s.Channel == MessengerChannel.Signal && s.Subscriptions.Count == 0)), Times.Once);
     }
     
     [Fact]

@@ -109,6 +109,7 @@ public class Program
 
         // Persistence
         serviceCollection.AddSingleton<ISubscriptionPersistence, SubscriptionPersistence>();
+        serviceCollection.AddSingleton<IAccessAttemptPersistence, AccessAttemptPersistence>();
 
         // Query execution
         serviceCollection.AddTransient<QueryCounter>();
@@ -139,6 +140,7 @@ public class Program
                 new TelegramBotClient(config.Telegram.BotToken),
                 sp.GetRequiredService<ILogger>(),
                 sp.GetRequiredService<ISubscriptionPersistence>(),
+                sp.GetRequiredService<IAccessAttemptPersistence>(),
                 sp.GetRequiredService<IParserProvider>(),
                 config.Messaging,
                 sp.GetRequiredService<MetricsService>()));
@@ -153,6 +155,7 @@ public class Program
                 sp.GetRequiredService<ISignalClient>(),
                 sp.GetRequiredService<ILogger>(),
                 sp.GetRequiredService<ISubscriptionPersistence>(),
+                sp.GetRequiredService<IAccessAttemptPersistence>(),
                 sp.GetRequiredService<IParserProvider>(),
                 config.Messaging,
                 sp.GetRequiredService<MetricsService>()));

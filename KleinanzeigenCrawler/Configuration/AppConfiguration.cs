@@ -19,6 +19,11 @@ public class MessagingConfiguration
 {
     public int SessionTimeoutMinutes { get; set; } = 15;
     public bool AllowNewUsers { get; set; } = true;
+    
+    /// <summary>
+    /// Password that a new user has to send once before the bot answers. Null if new users do not need a password.
+    /// </summary>
+    public string AccessPassword { get; set; }
 }
 
 public class TelegramConfiguration

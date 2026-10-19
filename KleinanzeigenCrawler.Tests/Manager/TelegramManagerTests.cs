@@ -24,7 +24,10 @@ namespace KleinanzeigenCrawler.Tests.Manager;
 
 public class TelegramManagerTests : IDisposable
 {
+    private const string Password = "correct-horse";
+
     private readonly InMemorySubscriptionPersistence _persistence = new();
+    private readonly InMemoryAccessAttemptPersistence _accessAttempts = new();
     private readonly Mock<ITelegramBotClient> _botClient = new();
     private readonly Mock<ILogger> _logger = new();
     private readonly ConcurrentQueue<SendMessageRequest> _sentMessages = new();
@@ -64,6 +67,7 @@ public class TelegramManagerTests : IDisposable
             _botClient.Object,
             _logger.Object,
             _persistence,
+            _accessAttempts,
             new Mock<IParserProvider>().Object,
             messaging);
         _managers.Add(manager);
@@ -154,6 +158,90 @@ public class TelegramManagerTests : IDisposable
         // Assert
         (await Wait.UntilAsync(() => _sentMessages.Any(m => m.Text.Contains("registrations are currently disabled")))).Should().BeTrue();
         _persistence.GetSubscribers().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task IncomingMessage_ShouldAskAnUnknownChatForThePasswordWhenOneIsConfigured()
+    {
+        // Arrange
+        var protectedManager = CreateManager(new MessagingConfiguration { AccessPassword = Password });
+        protectedManager.Start();
+
+        // Act
+        await SendTextAsync("1001", "/start");
+
+        // Assert
+        (await Wait.UntilAsync(() => _sentMessages.Any(m => m.Text.Contains("access password")))).Should().BeTrue();
+        _persistence.GetSubscribers().Should().BeEmpty();
+        _sentMessages.Should().OnlyContain(m => !m.Text.Contains("Welcome to Kleinanzeigen Crawler"));
+    }
+
+    [Fact]
+    public async Task Password_ShouldAdmitTheChatAndShowTheWelcomeMenu()
+    {
+        // Arrange
+        var protectedManager = CreateManager(new MessagingConfiguration { AccessPassword = Password });
+        protectedManager.Start();
+        await SendTextAsync("1001", "/start");
+        await Wait.UntilAsync(() => _sentMessages.Any(m => m.Text.Contains("access password")));
+
+        // Act
+        await SendTextAsync("1001", Password);
+
+        // Assert
+        (await Wait.UntilAsync(() => _sentMessages.Any(m => m.Text.Contains("Welcome to Kleinanzeigen Crawler")))).Should().BeTrue();
+        var subscriber = _persistence.GetSubscribers().Should().ContainSingle().Subject;
+        subscriber.Id.Should().Be("1001");
+        subscriber.Channel.Should().Be(MessengerChannel.Telegram);
+        _sentMessages.Select(m => m.Text).Should().Contain(text => text.Contains("Access granted."));
+    }
+
+    [Fact]
+    public async Task ABlockedChat_ShouldGetNoMessageAfterTenWrongPasswords()
+    {
+        // Arrange
+        var protectedManager = CreateManager(new MessagingConfiguration { AccessPassword = Password });
+        protectedManager.Start();
+        await SendTextAsync("1001", "/start");
+        for (var i = 0; i < AccessGate.MaxFailedAttempts; i++)
+        {
+            await SendTextAsync("1001", "wrong");
+        }
+
+        await Wait.UntilAsync(() => _sentMessages.Count(m => m.ChatId.Identifier == 1001) >= 1 + AccessGate.MaxFailedAttempts);
+
+        // Act
+        await SendTextAsync("1001", Password);
+        await SendTextAsync("1001", "/start");
+        await SendTextAsync("2002", "/start");
+        var otherChatAnswered = await Wait.UntilAsync(() => _sentMessages.Any(m => m.ChatId.Identifier == 2002));
+        await Task.Delay(200);
+
+        // Assert
+        otherChatAnswered.Should().BeTrue();
+        var blockedChatMessages = _sentMessages.Where(m => m.ChatId.Identifier == 1001).Select(m => m.Text).ToList();
+        blockedChatMessages.Should().HaveCount(1 + AccessGate.MaxFailedAttempts);
+        blockedChatMessages.Last().Should().Contain("blocked");
+        _persistence.GetSubscribers().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TheTextOfAChatThatIsNoSubscriberYet_ShouldNotBeLogged()
+    {
+        // Arrange
+        AddSubscriber("1001");
+        var protectedManager = CreateManager(new MessagingConfiguration { AccessPassword = Password });
+        protectedManager.Start();
+
+        // Act
+        await SendTextAsync("2002", "my-secret-guess");
+        await SendTextAsync("2002", Password);
+        await SendTextAsync("1001", "/help");
+        await Wait.UntilAsync(() => _sentMessages.Any(m => m.ChatId.Identifier == 1001));
+
+        // Assert
+        _logger.Verify(l => l.Information(It.Is<string>(message => message.Contains("my-secret-guess") || message.Contains(Password))), Times.Never);
+        _logger.Verify(l => l.Information(It.Is<string>(message => message.Contains("Message from 1001: /help"))), Times.AtLeastOnce);
     }
 
     [Fact]

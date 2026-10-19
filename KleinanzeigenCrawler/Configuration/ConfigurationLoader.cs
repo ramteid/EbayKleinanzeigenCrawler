@@ -9,6 +9,7 @@ namespace KleinanzeigenCrawler.Configuration;
 /// </summary>
 public class ConfigurationLoader
 {
+    private const int MinimumAccessPasswordLength = 8;
     private static readonly Regex InternationalNumber = new(@"^\+[1-9][0-9]{6,14}$");
 
     public static AppConfiguration LoadConfiguration()
@@ -26,6 +27,7 @@ public class ConfigurationLoader
         // Messaging configuration
         config.Messaging.SessionTimeoutMinutes = ReadInt(getVariable, "SESSION_TIMEOUT_MINUTES", config.Messaging.SessionTimeoutMinutes, min: 1, max: 10080);
         config.Messaging.AllowNewUsers = ReadBool(getVariable, "ALLOW_NEW_USERS", config.Messaging.AllowNewUsers);
+        config.Messaging.AccessPassword = ReadAccessPassword(getVariable);
         
         // Telegram configuration
         config.Telegram.BotToken = getVariable("TELEGRAM_BOT_TOKEN");
@@ -97,6 +99,27 @@ public class ConfigurationLoader
         }
 
         return parsed;
+    }
+
+    /// <summary>
+    /// Reads the access password without surrounding whitespace. An unset or empty variable means that new users do not need one.
+    /// A short password is an error, because only the number of failed attempts per user limits guessing it.
+    /// The error never contains the value.
+    /// </summary>
+    private static string ReadAccessPassword(Func<string, string> getVariable)
+    {
+        var password = getVariable("ACCESS_PASSWORD")?.Trim();
+        if (string.IsNullOrEmpty(password))
+        {
+            return null;
+        }
+
+        if (password.Length < MinimumAccessPasswordLength)
+        {
+            throw new InvalidOperationException($"ACCESS_PASSWORD must have at least {MinimumAccessPasswordLength} characters");
+        }
+
+        return password;
     }
 
     private static void ValidateSignal(SignalConfiguration signal)
