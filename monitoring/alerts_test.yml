@@ -1,0 +1,103 @@
+# Run from this directory: docker run --rm -v "$PWD:/w" -w /w --entrypoint promtool prom/prometheus:latest test rules alerts_test.yml
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+tests:
+  # A single failed request among many must not fire the HTTP error rate alert
+  - interval: 1m
+    input_series:
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="200",success="true"}'
+        values: '0+10x40'
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="503",success="false"}'
+        values: '0+2x40'
+      - series: 'up{job="kleinanzeigen-crawler"}'
+        values: '1x40'
+      - series: 'process_start_time_seconds{job="kleinanzeigen-crawler"}'
+        values: '0x40'
+      - series: 'crawler_active_subscriptions{job="kleinanzeigen-crawler"}'
+        values: '3x40'
+      - series: 'crawler_subscriptions_processed_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",success="true"}'
+        values: '0+3x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: HighHttpErrorRate
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: ApplicationStuck
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: CrawlerErrorBurst
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Crawler error burst detected"
+              description: "30 errors observed across HTTP and parsing in the last 15 minutes"
+  # Answers for deleted ads (404) are no failures
+  - interval: 1m
+    input_series:
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="200",success="true"}'
+        values: '0+1x30'
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="404",success="false"}'
+        values: '0+5x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: HighHttpErrorRate
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: CrawlerErrorBurst
+        exp_alerts: []
+  # Mostly failing requests fire the HTTP error rate alert per provider
+  - interval: 1m
+    input_series:
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="200",success="true"}'
+        values: '0+1x30'
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="Kleinanzeigen",status_code="503",success="false"}'
+        values: '0+3x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HighHttpErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              provider: Kleinanzeigen
+            exp_annotations:
+              summary: "High HTTP error rate on Kleinanzeigen"
+              description: "HTTP error rate is 75% over the last 5 minutes"
+  # Active subscriptions without any processed subscription fire ApplicationStuck, even if the counter never existed
+  - interval: 1m
+    input_series:
+      - series: 'crawler_active_subscriptions{job="kleinanzeigen-crawler"}'
+        values: '3x60'
+      - series: 'process_start_time_seconds{job="kleinanzeigen-crawler"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ApplicationStuck
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: ApplicationStuck
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: ApplicationStuck
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Application appears to be stuck"
+              description: "No subscriptions have been processed for at least 40 minutes despite active subscriptions"
+  # A crawler that cannot be scraped fires CrawlerDown
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kleinanzeigen-crawler"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: CrawlerDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: kleinanzeigen-crawler
+            exp_annotations:
+              summary: "Crawler is down"
+              description: "Prometheus has not been able to scrape the crawler for 5 minutes"

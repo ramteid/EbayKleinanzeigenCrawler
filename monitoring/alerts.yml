@@ -2,6 +2,16 @@ groups:
   - name: crawler_alerts
     interval: 1m
     rules:
+      # The crawler cannot be scraped, e.g. because it crashed or keeps restarting
+      - alert: CrawlerDown
+        expr: up{job="kleinanzeigen-crawler"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Crawler is down"
+          description: "Prometheus has not been able to scrape the crawler for 5 minutes"
+      
       # High error rate alert
       - alert: HighParseErrorRate
         expr: rate(crawler_parse_errors_total[5m]) > 0.1
@@ -11,16 +21,6 @@ groups:
         annotations:
           summary: "High parsing error rate detected"
           description: "Parse error rate is {{ $value }} errors/sec over the last 5 minutes"
-      
-      # No notifications sent
-      - alert: NoRecentNotifications
-        expr: rate(crawler_notifications_sent_total[15m]) == 0 AND crawler_active_subscriptions > 0
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: "No notifications sent recently"
-          description: "No notifications have been sent in the last 15 minutes despite having active subscriptions"
       
       # Rate limit exceeded
       - alert: RateLimitExceeded
@@ -32,39 +32,32 @@ groups:
           summary: "Rate limit exceeded on {{ $labels.provider }}"
           description: "{{ $value }} rate limit errors in the last 5 minutes"
       
-      # High HTTP error rate
+      # High HTTP error rate. The rates are summed first, otherwise every failing series would be divided by itself.
+      # Status 404 is left out of the failures because deleted ads answer with it regularly.
       - alert: HighHttpErrorRate
-        expr: (rate(crawler_http_requests_total{success="false"}[5m]) / rate(crawler_http_requests_total[5m])) > 0.2
+        expr: sum by (provider) (rate(crawler_http_requests_total{success="false", status_code!="404"}[5m])) / sum by (provider) (rate(crawler_http_requests_total[5m])) > 0.2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High HTTP error rate"
+          summary: "High HTTP error rate on {{ $labels.provider }}"
           description: "HTTP error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
       
-      # No active subscriptions (possible issue)
-      - alert: NoActiveSubscriptions
-        expr: crawler_active_subscriptions == 0
-        for: 10m
-        labels:
-          severity: info
-        annotations:
-          summary: "No active subscriptions"
-          description: "There are no active subscriptions to monitor"
-      
-      # Critical: Application appears to be stuck
+      # Critical: Application appears to be stuck. "or vector(0)" covers a counter that has not been created yet.
+      # The window is wide because the request limit of the providers makes a pass over many subscriptions slow,
+      # and the crawler must have been running for at least as long, as the counter only appears with the first processed subscription.
       - alert: ApplicationStuck
-        expr: rate(crawler_subscriptions_processed_total[5m]) == 0 AND crawler_active_subscriptions > 0
-        for: 10m
+        expr: (sum(increase(crawler_subscriptions_processed_total[30m])) or vector(0)) == 0 and on() max(crawler_active_subscriptions) > 0 and on() (time() - max(process_start_time_seconds{job="kleinanzeigen-crawler"})) > 2400
+        for: 5m
         labels:
           severity: critical
         annotations:
           summary: "Application appears to be stuck"
-          description: "No subscriptions have been processed in the last 10 minutes"
+          description: "No subscriptions have been processed for at least 40 minutes despite active subscriptions"
       
       # High request latency
       - alert: HighRequestLatency
-        expr: histogram_quantile(0.95, rate(crawler_request_duration_seconds_bucket[5m])) > 10
+        expr: histogram_quantile(0.95, sum by (provider, le) (rate(crawler_request_duration_seconds_bucket[5m]))) > 10
         for: 5m
         labels:
           severity: warning
@@ -74,17 +67,17 @@ groups:
       
       # Notification delivery failures
       - alert: HighNotificationFailureRate
-        expr: (rate(crawler_notifications_sent_total{success="false"}[5m]) / rate(crawler_notifications_sent_total[5m])) > 0.1
+        expr: sum by (channel) (rate(crawler_notifications_sent_total{success="false"}[5m])) / sum by (channel) (rate(crawler_notifications_sent_total[5m])) > 0.1
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High notification failure rate"
+          summary: "High notification failure rate on {{ $labels.channel }}"
           description: "Notification failure rate is {{ $value | humanizePercentage }}"
       
-      # Aggregate error burst (replacement for legacy Telegram admin pings)
+      # Aggregate error burst. "or vector(0)" keeps the sum defined while one of the counters has no series yet.
       - alert: CrawlerErrorBurst
-        expr: (sum(increase(crawler_parse_errors_total[15m])) + sum(increase(crawler_http_requests_total{success="false"}[15m]))) > 20
+        expr: (sum(increase(crawler_parse_errors_total[15m])) or vector(0)) + (sum(increase(crawler_http_requests_total{success="false", status_code!="404"}[15m])) or vector(0)) > 20
         for: 5m
         labels:
           severity: critical

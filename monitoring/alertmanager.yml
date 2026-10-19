@@ -4,20 +4,21 @@ global:
 route:
   group_by: ['alertname', 'severity']
   group_wait: 10s
-  group_interval: 10s
+  group_interval: 5m
   repeat_interval: 12h
-  receiver: 'crawler-alerts'
+  receiver: 'telegram-admin'
 
 receivers:
-  - name: 'crawler-alerts'
-    # Configure this webhook URL to point at your preferred alert sink
-    webhook_configs:
-      - url: 'http://alert-webhook:8080/alerts'
+  - name: 'telegram-admin'
+    telegram_configs:
+      # Compose secrets filled from TELEGRAM_BOT_TOKEN and ALERT_TELEGRAM_CHAT_ID
+      - bot_token_file: /run/secrets/alert_telegram_bot_token
+        chat_id_file: /run/secrets/alert_telegram_chat_id
         send_resolved: true
 
 inhibit_rules:
-  - source_match:
-      severity: 'critical'
-    target_match:
-      severity: 'warning'
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
     equal: ['alertname']

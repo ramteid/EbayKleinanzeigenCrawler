@@ -183,10 +183,12 @@ public abstract class ParserBase : IParser
             return false;
         }
 
+        // The line break prevents keywords from matching across the end of the title and the start of the description
+        var text = title + "\n" + descriptionText;
         try
         {
-            var allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, title + descriptionText);
-            var excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(subscription, title + descriptionText);
+            var allIncludeKeywordsFound = HtmlContainsAllIncludeKeywords(subscription, text);
+            var excludeKeywordsFound = HtmlContainsAnyExcludeKeywords(subscription, text);
             return allIncludeKeywordsFound && !excludeKeywordsFound;
         }
         catch (Exception ex)
@@ -197,56 +199,39 @@ public abstract class ParserBase : IParser
         }
     }
 
-    private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string descriptionText)
+    private bool HtmlContainsAllIncludeKeywords(Subscription subscription, string text)
     {
         if (subscription.IncludeKeywords is null)
         {
             throw new InvalidOperationException("IncludeKeywords cannot be null");
         }
 
-        if (subscription.IncludeKeywords.Count == 0)
+        // For a keyword "foo | bar", only one of the alternatives must be included
+        foreach (var alternatives in subscription.IncludeKeywords.Select(SplitAlternatives).Where(alternatives => alternatives.Length > 0))
         {
-            return true;
-        }
-
-        // For a keyword "foo | bar", only one of the disjunct keywords must be included
-        var disjunctionGroups = subscription.IncludeKeywords
-            .Where(str => str.Contains('|'))
-            .Select(str => str
-                .Split("|")
-                .Select(keyword => keyword.Trim())
-                .ToList()
-            );
-
-        foreach (var group in disjunctionGroups)
-        {
-            var keywordsOfGroupInText = group.Where(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
-            if (!keywordsOfGroupInText.Any())
+            if (!alternatives.Any(alternative => text.Contains(alternative, StringComparison.InvariantCultureIgnoreCase)))
             {
-                Logger.Verbose($"Not a match because no keyword found from '{string.Join(" | ", group)}'");
+                Logger.Verbose($"Not a match because no keyword found from '{string.Join(" | ", alternatives)}'");
                 return false;
             }
         }
 
-        var allNonDisjunctiveKeywordsFound = subscription.IncludeKeywords
-            .Where(k => !k.Contains('|'))
-            .All(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
-
-        return allNonDisjunctiveKeywordsFound;
+        return true;
     }
 
-    private bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string descriptionText)
+    private static bool HtmlContainsAnyExcludeKeywords(Subscription subscription, string text)
     {
         if (subscription.ExcludeKeywords is null)
         {
             throw new InvalidOperationException("ExcludeKeywords cannot be null");
         }
 
-        if (subscription.ExcludeKeywords.Count == 0)
-        {
-            return false;
-        }
-
-        return subscription.ExcludeKeywords.Any(k => descriptionText.Contains(k, StringComparison.InvariantCultureIgnoreCase));
+        return subscription.ExcludeKeywords
+            .SelectMany(SplitAlternatives)
+            .Any(alternative => text.Contains(alternative, StringComparison.InvariantCultureIgnoreCase));
     }
+
+    // Empty alternatives, e.g. in "foo |", are dropped because they would match any text
+    private static string[] SplitAlternatives(string keyword) =>
+        keyword.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

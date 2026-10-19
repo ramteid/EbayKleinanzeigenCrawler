@@ -1,14 +1,13 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using HtmlAgilityPack;
 using KleinanzeigenCrawler.Configuration;
 using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Models;
 using KleinanzeigenCrawler.Monitoring;
-using KleinanzeigenCrawler.Parser;
-using KleinanzeigenCrawler.Persistence;
+using KleinanzeigenCrawler.Query;
 using Serilog;
 using Serilog.Events;
 
@@ -16,16 +15,23 @@ namespace KleinanzeigenCrawler.Subscriptions;
 
 public class SubscriptionHandler
 {
+    /// <summary>
+    /// A result that cannot be handled this many times in a row (its page cannot be loaded or notifying about it fails) is given up,
+    /// so that a permanently broken ad neither uses up the request budget nor blocks the newer results
+    /// </summary>
+    public const int MaxLoadAttempts = 3;
+
     private readonly IOutgoingNotifications _outgoingNotifications;
     private readonly IParserProvider _parserProvider;
     private readonly ILogger _logger;
     private readonly ISubscriptionPersistence _subscriptionPersistence;
-    private readonly RedisUrlTracker _urlTracker;
+    private readonly IUrlTracker _urlTracker;
     private readonly AppConfiguration _config;
     private readonly MetricsService _metricsService;
+    private readonly ConcurrentDictionary<(Guid SubscriptionId, Uri Link), int> _failedAttempts = new();
 
     public SubscriptionHandler(IOutgoingNotifications outgoingNotifications, IParserProvider parserProvider, ILogger logger,
-        ISubscriptionPersistence subscriptionPersistence, RedisUrlTracker urlTracker,
+        ISubscriptionPersistence subscriptionPersistence, IUrlTracker urlTracker,
         AppConfiguration config, MetricsService metricsService = null)
     {
         _outgoingNotifications = outgoingNotifications;
@@ -39,7 +45,7 @@ public class SubscriptionHandler
 
     public async Task ProcessAllSubscriptionsAsync()
     {
-        _urlTracker.RestoreData();
+        _urlTracker.VerifyConnection();
         while (true)
         {
             var subscriptions = _subscriptionPersistence.GetEnabledSubscriptions();
@@ -86,13 +92,13 @@ public class SubscriptionHandler
                     {
                         var subscription = subscriptionWithParser.Subscription;
                         var parser = subscriptionWithParser.Parser;
+                        var providerName = GetProviderName(parser);
                         _logger.Information($"Processing subscription '{subscription.Title}' {subscription.Id}");
 
                         try
                         {
-                            var completedSuccessfully = await ProcessSubscriptionWithRedisAsync(subscription, parser);
-                            var providerName = GetProviderName(parser);
-                            _metricsService?.RecordSubscriptionProcessed(providerName, true);
+                            var completedSuccessfully = await ProcessSubscriptionAsync(subscription, parser);
+                            _metricsService?.RecordSubscriptionProcessed(providerName, completedSuccessfully);
 
                             if (completedSuccessfully)
                             {
@@ -105,7 +111,6 @@ public class SubscriptionHandler
                         }
                         catch (Exception e)
                         {
-                            var providerName = GetProviderName(parser);
                             _logger.Error(e, $"Cancelled processing subscription '{subscription.Title}' {subscription.Id}");
                             _metricsService?.RecordSubscriptionProcessed(providerName, false);
                             _metricsService?.RecordException("SubscriptionHandler", e.GetType().Name);
@@ -123,9 +128,13 @@ public class SubscriptionHandler
         }
     }
 
-    private async Task<bool> ProcessSubscriptionWithRedisAsync(Subscription subscription, IParser parser)
+    /// <summary>
+    /// Notifies about the new matching results of one subscription and remembers every result that was handled
+    /// </summary>
+    /// <returns>True if all result pages were loaded and parsed</returns>
+    public async Task<bool> ProcessSubscriptionAsync(Subscription subscription, IParser parser)
     {
-        var (newResults, completedSuccessfully) = await GetNewLinksWithRedis(parser, subscription.QueryUrl, _urlTracker, subscription.Id);
+        var (newResults, completedSuccessfully) = await GetNewResultsAsync(parser, subscription.QueryUrl, subscription.Id);
 
         if (completedSuccessfully)
         {
@@ -133,31 +142,34 @@ public class SubscriptionHandler
             _metricsService?.ObserveResultsPerSubscription(newResults.Count);
         }
 
-        var processedUrls = new List<AlreadyProcessedUrl>();
+        // Without an initial pull, the results of the first run only serve as the baseline for detecting new ones
+        var checkForMatches = subscription.FirstRunCompleted || subscription.InitialPull;
         foreach (var newResult in newResults)
         {
-            if (subscription.FirstRunCompleted || subscription.InitialPull)
+            if (checkForMatches && !await TryNotifyIfMatchAsync(parser, subscription, newResult))
             {
-                await CheckForMatchAsync(parser, subscription, newResult);
+                continue;
             }
-            
-            processedUrls.Add(new AlreadyProcessedUrl
-            {
-                Uri = newResult.Link,
-                LastFound = DateTime.UtcNow
-            });
+
+            // Remembering each result right away prevents repeated notifications when a later result fails
+            await _urlTracker.MarkProcessedAsync(subscription.Id, newResult.Link);
         }
-        
-        if (processedUrls.Any())
-        {
-            await _urlTracker.AddOrUpdateAsync(subscription.Id, processedUrls);
-            _urlTracker.PersistData();
-        }
+
+        ForgetFailedAttemptsOfResultsNoLongerListed(subscription.Id, newResults);
 
         return completedSuccessfully;
     }
+
+    private void ForgetFailedAttemptsOfResultsNoLongerListed(Guid subscriptionId, List<Result> listedNewResults)
+    {
+        var listedLinks = listedNewResults.Select(result => result.Link).ToHashSet();
+        foreach (var key in _failedAttempts.Keys.Where(key => key.SubscriptionId == subscriptionId && !listedLinks.Contains(key.Link)))
+        {
+            _failedAttempts.TryRemove(key, out _);
+        }
+    }
     
-    private async Task<(List<Result> NewResults, bool CompletedSuccessfully)> GetNewLinksWithRedis(IParser parser, Uri firstPageUrl, RedisUrlTracker redisTracker, Guid subscriptionId)
+    private async Task<(List<Result> NewResults, bool CompletedSuccessfully)> GetNewResultsAsync(IParser parser, Uri firstPageUrl, Guid subscriptionId)
     {
         var firstPageHtml = await parser.QueryExecutor.GetHtml(firstPageUrl);
         if (firstPageHtml is null)
@@ -181,15 +193,9 @@ public class SubscriptionHandler
         for (var i = pages.Count - 1; i >= 0; i--)
         {
             var page = pages[i];
-            HtmlAgilityPack.HtmlDocument pageHtml;
-            if (page == firstPageUrl)
-            {
-                pageHtml = firstPageHtml;
-            }
-            else
-            {
-                pageHtml = await parser.QueryExecutor.GetHtml(page);
-            }
+            var pageHtml = page == firstPageUrl
+                ? firstPageHtml
+                : await TryLoadAdditionalPageAsync(parser, page);
 
             if (pageHtml is null)
             {
@@ -216,35 +222,27 @@ public class SubscriptionHandler
             var pageNewResults = new List<Result>();
             foreach (var link in links)
             {
-                if (seen.Contains(link.Link))
+                if (!seen.Add(link.Link))
                 {
                     // already counted from another page
                     continue;
                 }
 
-                var isProcessed = redisTracker.IsUrlProcessed(subscriptionId, link.Link);
-                if (isProcessed)
+                if (await _urlTracker.RefreshIfProcessedAsync(subscriptionId, link.Link))
                 {
-                    redisTracker.UpdateLastFound(subscriptionId, link.Link);
                     oldLinksCount++;
-                    seen.Add(link.Link);
                 }
                 else
                 {
                     pageNewResults.Add(link);
                     newLinksCount++;
-                    seen.Add(link.Link);
                 }
             }
 
             // Reverse the results from this page so they are in oldest-to-newest order
             // (assuming ParseLinks returns newest-to-oldest)
             pageNewResults.Reverse();
-
-            if (pageNewResults.Count > 0)
-            {
-                newResults.AddRange(pageNewResults);
-            }
+            newResults.AddRange(pageNewResults);
 
             _logger.Information($"Found {links.Count} links on page {i + 1}, (new: {newLinksCount}, old: {oldLinksCount})");
         }
@@ -253,14 +251,40 @@ public class SubscriptionHandler
         return (newResults, allPagesFetchedSuccessfully);
     }
 
-    private async Task CheckForMatchAsync(IParser parser, Subscription subscription, Result result)
+    private async Task<HtmlAgilityPack.HtmlDocument> TryLoadAdditionalPageAsync(IParser parser, Uri page)
     {
-        var htmlDocument = await parser.QueryExecutor.GetHtml(result.Link);
+        try
+        {
+            return await parser.QueryExecutor.GetHtml(page);
+        }
+        catch (PageNotFoundException e)
+        {
+            // The result list became shorter in the meantime
+            _logger.Warning(e, "Result page {Page} does not exist anymore", page);
+            return null;
+        }
+    }
+
+    /// <returns>False if the result could not be handled and is retried during the next run</returns>
+    private async Task<bool> TryNotifyIfMatchAsync(IParser parser, Subscription subscription, Result result)
+    {
+        HtmlAgilityPack.HtmlDocument htmlDocument;
+        try
+        {
+            htmlDocument = await parser.QueryExecutor.GetHtml(result.Link);
+        }
+        catch (PageNotFoundException)
+        {
+            // The ad was deleted after it was listed, so there is nothing to retry
+            _logger.Information("Skipping {Link} because the ad does not exist anymore", result.Link);
+            return true;
+        }
+
         if (htmlDocument is null)
         {
-            return;
+            return !ShouldRetry(subscription, result, "load");
         }
-            
+
         bool isMatch;
         try
         {
@@ -268,21 +292,51 @@ public class SubscriptionHandler
         }
         catch (Exception e)
         {
+            // Parsing the same page again would fail again, so the result is not retried
             _logger.Error(e, "Skipping this link");
             _metricsService?.RecordException("SubscriptionHandler.IsMatch", e.GetType().Name);
-            return;
+            return true;
         }
 
         if (isMatch)
         {
             LogMatchDetails(subscription, result, htmlDocument);
             _logger.Information($"Found match: {result.Link}");
-            await _outgoingNotifications.NotifySubscribers(subscription, result);
+            try
+            {
+                await _outgoingNotifications.NotifySubscribers(subscription, result);
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "Notifying about {Link} for subscription '{Title}' {Id} failed", result.Link, subscription.Title, subscription.Id);
+                _metricsService?.RecordException("SubscriptionHandler.Notify", e.GetType().Name);
+                return !ShouldRetry(subscription, result, "notify");
+            }
         }
         else
         {
             _logger.Debug($"No match: {result.Link}");
         }
+
+        _failedAttempts.TryRemove((subscription.Id, result.Link), out _);
+        return true;
+    }
+
+    private bool ShouldRetry(Subscription subscription, Result result, string action)
+    {
+        var key = (subscription.Id, result.Link);
+        var attempts = _failedAttempts.AddOrUpdate(key, 1, (_, previousAttempts) => previousAttempts + 1);
+        if (attempts < MaxLoadAttempts)
+        {
+            _logger.Warning("Could not {Action} {Link} for subscription '{Title}' {Id} (attempt {Attempt} of {MaxAttempts}). Retrying during the next run.",
+                action, result.Link, subscription.Title, subscription.Id, attempts, MaxLoadAttempts);
+            return true;
+        }
+
+        _failedAttempts.TryRemove(key, out _);
+        _logger.Error("Giving up on {Link} for subscription '{Title}' {Id} after {MaxAttempts} failed attempts to {Action} it",
+            result.Link, subscription.Title, subscription.Id, MaxLoadAttempts, action);
+        return false;
     }
 
     private static string GetProviderName(IParser parser)

@@ -1,10 +1,8 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using KleinanzeigenCrawler.Models;
+using KleinanzeigenCrawler.Interfaces;
 using KleinanzeigenCrawler.Monitoring;
 using Serilog;
 using StackExchange.Redis;
@@ -14,15 +12,14 @@ namespace KleinanzeigenCrawler.Persistence;
 /// <summary>
 /// Redis-based URL tracking with space-efficient hashing and 90-day TTL
 /// </summary>
-public class RedisUrlTracker
+public class RedisUrlTracker : IUrlTracker
 {
+    private static readonly TimeSpan Expiry = TimeSpan.FromDays(90);
+    private const string KeyPrefix = "url:";
+
     private readonly ILogger _logger;
-    private readonly IConnectionMultiplexer _redis;
     private readonly IDatabase _db;
     private readonly MetricsService _metricsService;
-    private const int ExpiryDays = 90;
-    private const string KeyPrefix = "url:";
-    private const string SubKeyPrefix = "sub:";
     
     public RedisUrlTracker(ILogger logger, string connectionString, MetricsService metricsService = null)
     {
@@ -35,137 +32,54 @@ public class RedisUrlTracker
         options.ConnectTimeout = 5000;
         options.SyncTimeout = 5000;
         
-        _redis = ConnectionMultiplexer.Connect(options);
-        _db = _redis.GetDatabase();
+        _db = ConnectionMultiplexer.Connect(options).GetDatabase();
         
         _logger.Information("Redis URL tracker initialized");
     }
     
-    public async Task AddOrUpdateAsync(Guid subscriptionId, List<AlreadyProcessedUrl> urls)
+    public void VerifyConnection()
+    {
+        _db.Ping();
+        _logger.Information("Redis connection verified - data persists in Redis");
+    }
+    
+    public Task<bool> RefreshIfProcessedAsync(Guid subscriptionId, Uri url)
+    {
+        // Redis only sets an expiry on existing keys, so this checks and refreshes in one round trip
+        return ExecuteAsync("RefreshIfProcessed", subscriptionId, () => _db.KeyExpireAsync(GetKey(subscriptionId, url), Expiry));
+    }
+    
+    public Task MarkProcessedAsync(Guid subscriptionId, Uri url)
+    {
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        return ExecuteAsync("MarkProcessed", subscriptionId, () => _db.StringSetAsync(GetKey(subscriptionId, url), timestamp, Expiry));
+    }
+    
+    private async Task<T> ExecuteAsync<T>(string operation, Guid subscriptionId, Func<Task<T>> action)
     {
         try
         {
-            var batch = _db.CreateBatch();
-            var tasks = new List<Task>();
-            
-            foreach (var url in urls)
-            {
-                var hash = ComputeUrlHash(url.Uri.ToString());
-                var key = $"{KeyPrefix}{subscriptionId}:{hash}";
-                var lastFoundTimestamp = new DateTimeOffset(url.LastFound).ToUnixTimeSeconds();
-                
-                // Store timestamp with 90-day expiry
-                var setTask = batch.StringSetAsync(key, lastFoundTimestamp, TimeSpan.FromDays(ExpiryDays));
-                tasks.Add(setTask);
-            }
-            
-            batch.Execute();
-            await Task.WhenAll(tasks);
-            
-            _metricsService?.RecordRedisOperation("AddOrUpdate", true);
-            _logger.Verbose($"Updated {urls.Count} URLs for subscription {subscriptionId}");
+            var result = await action();
+            _metricsService?.RecordRedisOperation(operation, true);
+            return result;
         }
-        catch (RedisException ex)
+        catch (Exception ex)
         {
-            _logger.Error(ex, $"Redis error updating URLs for subscription {subscriptionId}");
-            _metricsService?.RecordRedisOperation("AddOrUpdate", false);
-            _metricsService?.RecordException("RedisUrlTracker", ex.GetType().Name);
+            _logger.Error(ex, "Redis operation {Operation} failed for subscription {SubscriptionId}", operation, subscriptionId);
+            _metricsService?.RecordRedisOperation(operation, false);
+            _metricsService?.RecordException(nameof(RedisUrlTracker), ex.GetType().Name);
             throw;
         }
     }
     
-    public void RestoreData()
-    {
-        try
-        {
-            // Test connection
-            _db.Ping();
-            _logger.Information("Redis connection verified - data persists in Redis");
-        }
-        catch (RedisException ex)
-        {
-            _logger.Error(ex, "Failed to connect to Redis");
-            throw;
-        }
-    }
-    
-    public void PersistData()
-    {
-        // Redis automatically persists with AOF/RDB
-        // TTL-based expiry handles cleanup of old URLs (90 days)
-        // We rely on Redis configuration for persistence to avoid performance impact of frequent BGSAVE calls
-    }
-    
-    /// <summary>
-    /// Check if a URL has been processed for a subscription
-    /// </summary>
-    public bool IsUrlProcessed(Guid subscriptionId, Uri url)
-    {
-        try
-        {
-            var hash = ComputeUrlHash(url.ToString());
-            var key = $"{KeyPrefix}{subscriptionId}:{hash}";
-            return _db.KeyExists(key);
-        }
-        catch (RedisException ex)
-        {
-            _logger.Error(ex, $"Redis error checking URL for subscription {subscriptionId}");
-            return false;
-        }
-    }
-    
-    /// <summary>
-    /// Update LastFound timestamp for an existing URL
-    /// </summary>
-    public void UpdateLastFound(Guid subscriptionId, Uri url)
-    {
-        try
-        {
-            var hash = ComputeUrlHash(url.ToString());
-            var key = $"{KeyPrefix}{subscriptionId}:{hash}";
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            
-            _db.StringSet(key, timestamp, TimeSpan.FromDays(ExpiryDays));
-            _logger.Verbose($"Updated LastFound for URL hash {hash}");
-        }
-        catch (RedisException ex)
-        {
-            _logger.Error(ex, $"Redis error updating LastFound for subscription {subscriptionId}");
-        }
-    }
-    
-    /// <summary>
-    /// Get subscription statistics
-    /// </summary>
-    public int GetProcessedUrlCount(Guid subscriptionId)
-    {
-        try
-        {
-            var pattern = $"{KeyPrefix}{subscriptionId}:*";
-            var endpoints = _redis.GetEndPoints();
-            if (endpoints.Length == 0)
-            {
-                _logger.Warning("No Redis endpoints available");
-                return 0;
-            }
-            
-            var server = _redis.GetServer(endpoints[0]);
-            return server.Keys(pattern: pattern).Count();
-        }
-        catch (RedisException ex)
-        {
-            _logger.Error(ex, $"Redis error counting URLs for subscription {subscriptionId}");
-            return 0;
-        }
-    }
+    private static string GetKey(Guid subscriptionId, Uri url) => $"{KeyPrefix}{subscriptionId}:{ComputeUrlHash(url.ToString())}";
     
     /// <summary>
     /// Compute SHA256 hash of URL for space-efficient storage
     /// </summary>
     private static string ComputeUrlHash(string url)
     {
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(url));
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(url));
         return Convert.ToBase64String(hashBytes).Replace("/", "_").Replace("+", "-").TrimEnd('=');
     }
 }

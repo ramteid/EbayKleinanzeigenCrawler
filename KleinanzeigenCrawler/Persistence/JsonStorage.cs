@@ -22,8 +22,17 @@ public class JsonStorage : IDataStorage
         lock (_lockObject)
         {
             var jsonString = JsonConvert.SerializeObject(data, new JsonSerializerSettings { Formatting = Formatting.Indented });
-            // Use UTF8 without BOM to prevent parsing issues
-            File.WriteAllText(fileName, jsonString, new UTF8Encoding(false));
+            
+            // The data is written to a temporary file that replaces the target file only once it is complete,
+            // so that a crash or a full disk cannot leave a truncated file behind
+            var temporaryFileName = fileName + ".tmp";
+            using (var stream = new FileStream(temporaryFileName, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                // Use UTF8 without BOM to prevent parsing issues
+                stream.Write(new UTF8Encoding(false).GetBytes(jsonString));
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temporaryFileName, fileName, overwrite: true);
         }
     }
 

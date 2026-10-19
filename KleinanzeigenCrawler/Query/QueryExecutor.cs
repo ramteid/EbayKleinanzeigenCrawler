@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -59,26 +60,31 @@ public class QueryExecutor : IQueryExecutor, IDisposable
         var provider = url.Host.Contains("kleinanzeigen") ? "Kleinanzeigen" : 
                        url.Host.Contains("wg-gesucht") ? "WgGesucht" : "Unknown";
 
-        using var requestTimer = _metricsService?.MeasureRequestDuration(provider);
-
         try 
         {
             // Allow retrying once after a 429/Retry-After response was found to avoid temporarily skipping an link
             var firstTry = await TryHttpRequest(url, provider);
-            if (firstTry is not null)
+            if (firstTry.Document is not null)
             {
-                return firstTry;
+                return firstTry.Document;
             }
+            
+            ThrowIfPageDoesNotExist(url, firstTry.StatusCode);
             
             _logger.Debug("First try failed. Trying one more time.");
             var secondTry = await TryHttpRequest(url, provider);
-            if (secondTry is not null)
+            if (secondTry.Document is not null)
             {
-                return secondTry;
+                return secondTry.Document;
             }
 
+            ThrowIfPageDoesNotExist(url, secondTry.StatusCode);
             _logger.Warning($"Both HTTP attempts failed for {url}");
             return null;
+        }
+        catch (PageNotFoundException)
+        {
+            throw;
         }
         catch (Exception e)
         {
@@ -89,14 +95,22 @@ public class QueryExecutor : IQueryExecutor, IDisposable
         }
     }
 
-    private async Task<HtmlDocument> TryHttpRequest(Uri url, string provider)
+    private static void ThrowIfPageDoesNotExist(Uri url, HttpStatusCode statusCode)
     {
-        await _queryCounter.WaitForAcquiringPermissionForQueryAsync(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan, acquire: true);
+        if (statusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+        {
+            throw new PageNotFoundException(url, statusCode);
+        }
+    }
+
+    private async Task<(HtmlDocument Document, HttpStatusCode StatusCode)> TryHttpRequest(Uri url, string provider)
+    {
+        await _queryCounter.WaitForAcquiringPermissionForQueryAsync(_timeToWaitBetweenMaxAmountOfRequests, _allowedRequestsPerTimespan);
         
         using var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
         var userAgent = _userAgentProvider.GetRandomUserAgent();
         requestMessage.Headers.Add("user-agent", userAgent);
-        var response = await _httpClient.SendAsync(requestMessage);
+        using var response = await SendMeasuredAsync(requestMessage, provider);
 
         var htmlDocument = new HtmlDocument();
         var html = await response.Content.ReadAsStringAsync();
@@ -107,7 +121,7 @@ public class QueryExecutor : IQueryExecutor, IDisposable
         if (await ValidateResponse(url, response, html))
         {
             _metricsService?.RecordHttpRequest(provider, statusCode, true);
-            return htmlDocument;
+            return (htmlDocument, response.StatusCode);
         }
         else
         {
@@ -122,8 +136,15 @@ public class QueryExecutor : IQueryExecutor, IDisposable
                 File.WriteAllText(Path.Join(_dataPath, $"validateResponse_response_{guid}"), JsonSerializer.Serialize(response));
                 _metricsService?.RecordException("QueryExecutor", "HttpRequestError");
             }
-            return null;
+            return (null, response.StatusCode);
         }
+    }
+
+    private async Task<HttpResponseMessage> SendMeasuredAsync(HttpRequestMessage requestMessage, string provider)
+    {
+        // Only the HTTP exchange is measured, not the wait for the rate limit
+        using var requestTimer = _metricsService?.MeasureRequestDuration(provider);
+        return await _httpClient.SendAsync(requestMessage);
     }
 
     private async Task<bool> ValidateResponse(Uri url, HttpResponseMessage response, string html)

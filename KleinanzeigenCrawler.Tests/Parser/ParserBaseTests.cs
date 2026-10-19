@@ -135,6 +135,62 @@ public class ParserBaseTests
         });
     }
     
+    [Fact]
+    public void IsMatch_ShouldNotMatchKeywordSpanningTitleAndDescription()
+    {
+        // Arrange
+        var parser = new TestParser(_mockLogger.Object, _mockQueryExecutor.Object, null);
+        var subscription = new Subscription { IncludeKeywords = new List<string> { "TitleTest" } };
+        
+        // Act
+        var isMatch = parser.IsMatch(new HtmlDocument(), subscription);
+        
+        // Assert
+        isMatch.Should().BeFalse();
+    }
+    
+    [Fact]
+    public void IsMatch_ShouldMatchWhenAnyAlternativeOfIncludeKeywordIsFound()
+    {
+        // Arrange
+        var parser = new TestParser(_mockLogger.Object, _mockQueryExecutor.Object, null);
+        var subscription = new Subscription { IncludeKeywords = new List<string> { "missing | description", "title" } };
+        
+        // Act
+        var isMatch = parser.IsMatch(new HtmlDocument(), subscription);
+        
+        // Assert
+        isMatch.Should().BeTrue();
+    }
+    
+    [Fact]
+    public void IsMatch_ShouldIgnoreEmptyAlternatives()
+    {
+        // Arrange
+        var parser = new TestParser(_mockLogger.Object, _mockQueryExecutor.Object, null);
+        var subscription = new Subscription { IncludeKeywords = new List<string> { "missing |" } };
+        
+        // Act
+        var isMatch = parser.IsMatch(new HtmlDocument(), subscription);
+        
+        // Assert
+        isMatch.Should().BeFalse();
+    }
+    
+    [Fact]
+    public void IsMatch_ShouldNotMatchWhenAnyAlternativeOfExcludeKeywordIsFound()
+    {
+        // Arrange
+        var parser = new TestParser(_mockLogger.Object, _mockQueryExecutor.Object, null);
+        var subscription = new Subscription { ExcludeKeywords = new List<string> { "missing | description" } };
+        
+        // Act
+        var isMatch = parser.IsMatch(new HtmlDocument(), subscription);
+        
+        // Assert
+        isMatch.Should().BeFalse();
+    }
+    
     // Test implementation of ParserBase for testing abstract methods
     private class TestParser : ParserBase
     {

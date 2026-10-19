@@ -61,8 +61,11 @@ public class Program
             .WriteTo.File(
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {SourceContext}{Message:lj} {Exception}{NewLine}", 
                 path: Path.Join(config.Crawler.DataPath, "logfile.txt"), 
+                // The retention time only applies to files named after a rolling interval, and the default count limit of 31 files would end it early
+                rollingInterval: RollingInterval.Day,
                 rollOnFileSizeLimit: true, 
                 fileSizeLimitBytes: config.Crawler.LogFileSizeLimitMB * 1024 * 1024, 
+                retainedFileCountLimit: null,
                 retainedFileTimeLimit: TimeSpan.FromDays(config.Crawler.LogRetentionDays)
             )
             .CreateLogger());
@@ -76,7 +79,7 @@ public class Program
         
         // Redis
         var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "redis:6379";
-        serviceCollection.AddSingleton<RedisUrlTracker>(sp =>
+        serviceCollection.AddSingleton<IUrlTracker>(sp =>
             new RedisUrlTracker(
                 sp.GetService<ILogger>(),
                 redisConnectionString,

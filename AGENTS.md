@@ -63,7 +63,7 @@ The application is designed to run continuously inside Docker. A Redis instance 
 | `SubscriptionHandler` | `Subscriptions/SubscriptionHandler.cs` | Infinite loop that queries subscriptions, feeds parsers, matches results, calls Telegram notifications. |
 | `ParserProvider` & `ParserBase` | `Parser/` | Provides parser implementations (Kleinanzeigen & WG-Gesucht) with consistent rate limiting and error handling. |
 | `RedisUrlTracker` | `Persistence/RedisUrlTracker.cs` | SHA256 hashes of processed URLs with 90-day TTL, prevents duplicate notifications. |
-| `SubscriptionPersistence` & `JsonStorage` | `Persistence/` | Thread-safe JSON persistence of `Subscriber` objects under `./vol`. |
+| `SubscriptionPersistence` & `JsonStorage` | `Persistence/` | Thread-safe JSON persistence of `Subscriber` objects under `./data`. |
 | `MetricsService` | `Monitoring/MetricsService.cs` | Prometheus counters, gauges, histograms, summaries used throughout the app. |
 
 ---
@@ -71,17 +71,17 @@ The application is designed to run continuously inside Docker. A Redis instance 
 ## 3. Data & Persistence
 
 ### Subscriber Data
-- Stored in `./vol/Subscribers.json`.
+- Stored in `./data/Subscribers.json`.
 - Managed via `SubscriptionPersistence` using the `IDataStorage` abstraction (`JsonStorage`).
 - Automatically restored on startup; saved after each mutation.
 
 ### Processed URLs
 - Stored exclusively in Redis (`redis` service in docker-compose).
-- URLs are hashed (SHA256) and stored per subscription with 90-day TTL.
-- `RedisUrlTracker` handles `AddOrUpdate`, `IsUrlProcessed`, `UpdateLastFound`, etc.
+- URLs are hashed (SHA256) and stored per subscription with a 90-day TTL that is refreshed while the URL is still listed.
+- `RedisUrlTracker` implements `IUrlTracker` (`RefreshIfProcessedAsync`, `MarkProcessedAsync`). Redis errors are thrown, never treated as "not processed", so an outage cannot re-notify old ads.
 
 ### Logs
-- Serilog writes rotating files to `./vol/logfile.txt` (1 MB cap, 90-day retention).
+- Serilog writes daily rolling files to `./data/logfile<yyyyMMdd>.txt` (1 MB cap per file, 90-day retention).
 
 ---
 
@@ -101,10 +101,10 @@ The application is designed to run continuously inside Docker. A Redis instance 
 
 - Implemented in `SubscriptionHandler.ProcessAllSubscriptionsAsync`.
 - Steps:
-  1. Restore Redis tracker connection.
+  1. Verify the Redis connection.
   2. Fetch enabled subscriptions.
   3. Group by parser to respect provider rate limits.
-  4. For each subscription: fetch pages, parse results, check Redis, run keyword matching, notify Telegram, update Redis.
+  4. For each subscription: fetch pages, parse results, check Redis, run keyword matching, notify Telegram, and remember each handled result in Redis right away. A result whose ad page cannot be loaded, or whose notification throws, is retried in the next passes and given up after 3 failed attempts. Ads answering 404/410 (`PageNotFoundException`) are treated as deleted and not retried.
   5. Wait for `CHECK_INTERVAL_SECONDS` (default 60) and repeat.
 - Metrics recorded: subscription processing success, HTTP requests, parse errors, notification latency, etc.
 
@@ -116,10 +116,10 @@ Docker Compose services:
 - `bot`: the crawler.
 - `redis`: URL tracker backend (internal network only).
 - `prometheus`: scrapes bot metrics (not exposed to host).
-- `alertmanager`: handles Prometheus alerts (webhook target configurable at `monitoring/alertmanager.yml`).
-- `grafana`: exposed on `localhost:3000` for dashboards and alert visualization.
+- `alertmanager`: sends Prometheus alerts through the Telegram bot to the chat `ALERT_TELEGRAM_CHAT_ID` (Compose secrets read by `monitoring/alertmanager.yml`). Its UI has no authentication and is published on `127.0.0.1:9093` only.
+- `grafana`: published on port `3333` for dashboards and alert visualization.
 
-Prometheus alerts (see `monitoring/alerts.yml`) include parse error bursts, HTTP error rate, stuck processing, etc. Alertmanager currently points to a placeholder webhook (`http://alert-webhook:8080/alerts`); update this to a real sink before production use.
+Prometheus alerts (see `monitoring/alerts.yml`) include crawler down, parse error bursts, HTTP error rate, stuck processing, etc.
 
 ---
 
@@ -133,9 +133,10 @@ Prometheus alerts (see `monitoring/alerts.yml`) include parse error bursts, HTTP
 | `PROMETHEUS_PORT` | `9090` | Port used by the bot container for metrics (internal network). |
 | `CHECK_INTERVAL_SECONDS` | `60` | Delay between crawl passes. |
 | `SESSION_TIMEOUT_MINUTES` | `15` | Session inactivity timeout. |
-| `DATA_PATH` | `data` | Relative path inside container mapped to `./vol`. |
+| `DATA_PATH` | `data` | Relative path inside container mapped to `./data`. |
 | `REDIS_CONNECTION_STRING` | `redis:6379,abortConnect=false` | Connection string passed to `RedisUrlTracker`. |
-| `GRAFANA_PASSWORD` | `admin` | Grafana admin password (docker-compose). |
+| `GRAFANA_PASSWORD` | — (required) | Grafana admin password (docker-compose). |
+| `ALERT_TELEGRAM_CHAT_ID` | — (required) | Telegram chat that receives the alerts (docker-compose). Alerts are sent by the bot of `TELEGRAM_BOT_TOKEN`. |
 
 `.env` or `.env.example` contains typical overrides. Docker Compose loads this file automatically.
 
@@ -151,7 +152,7 @@ docker compose logs -f bot
 docker compose down
 ```
 
-Grafana UI: `http://localhost:3000` (default credentials `admin / GRAFANA_PASSWORD`).
+Grafana UI: `http://<docker-host>:3333` (user `admin`, password `GRAFANA_PASSWORD`).
 
 ### Local Development
 ```bash
@@ -162,18 +163,18 @@ dotnet run                # requires TELEGRAM_BOT_TOKEN env var
 ```
 
 ### Tests
-`dotnet test` runs the unit test suite (SessionManager, SubscriptionService, Parser parsing behavior, etc.). Tests are located under `KleinanzeigenCrawler.Tests`.
+`dotnet test` runs the unit test suite (SessionManager, SubscriptionService, Parser parsing behavior, etc.). Tests are located under `KleinanzeigenCrawler.Tests`. The alert rules are tested with `promtool test rules monitoring/alerts_test.yml` (see README).
 
 ---
 
 ## 9. Common Pitfalls
 
-- **Missing Redis**: the app crashes if it cannot connect; ensure `redis` service is running in docker-compose or update `REDIS_CONNECTION_STRING`.
+- **Missing Redis**: the app exits on startup if it cannot connect (Compose starts it only after Redis is healthy); ensure `redis` service is running in docker-compose or update `REDIS_CONNECTION_STRING`. During a Redis outage the affected subscriptions fail for that pass.
 - **Mobile URLs**: subscription creation rejects non-HTTPS desktop URLs.
 - **Too many results**: subscriptions with >50 estimated results are rejected to protect the provider.
 - **Rate limiting**: if you see 429/Retry-After, the QueryExecutor automatically backs off, but excessive subscriptions may still breach limits.
-- **Alertmanager webhook**: set a real endpoint; default placeholder goes nowhere.
-- **Data path**: `DATA_PATH` should stay inside the mounted volume (`./vol`) or data will be lost when the container restarts.
+- **Alert delivery**: the alert chat must have started a conversation with the bot, otherwise Telegram rejects the alert messages (see `docker compose logs alertmanager`).
+- **Data path**: `DATA_PATH` should stay inside the mounted volume (`./data`) or data will be lost when the container restarts.
 
 ---
 

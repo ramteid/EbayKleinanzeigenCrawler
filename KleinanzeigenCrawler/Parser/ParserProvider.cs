@@ -12,7 +12,8 @@ public class ParserProvider : IParserProvider
 {
     private static readonly IReadOnlyList<ParserRegistration> ParserRegistrations = new[]
     {
-        ParserRegistration.ForHostSuffixes("kleinanzeigen", typeof(KleinanzeigenParser), "ebay-kleinanzeigen.de", "kleinanzeigen.de"),
+        // The former domain ebay-kleinanzeigen.de answers with 410 Gone, so it is not supported
+        ParserRegistration.ForHostSuffixes("kleinanzeigen", typeof(KleinanzeigenParser), "kleinanzeigen.de"),
         ParserRegistration.ForHostSuffixes("wg-gesucht", typeof(WgGesuchtParser), "wg-gesucht.de")
     };
 
@@ -56,7 +57,10 @@ public class ParserProvider : IParserProvider
     {
         public bool Supports(string host)
         {
-            return HostSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+            // Only the domain itself and its subdomains match, not other domains with the same ending
+            return HostSuffixes.Any(suffix =>
+                host.Equals(suffix, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase));
         }
 
         public static ParserRegistration ForHostSuffixes(string identifier, Type parserType, params string[] hostSuffixes)

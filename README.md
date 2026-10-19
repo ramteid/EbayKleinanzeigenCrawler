@@ -21,7 +21,7 @@ Modern .NET 8 crawler that watches classified ads on **kleinanzeigen.de** and **
 
 | Provider | Parser | Notes |
 |----------|--------|-------|
-| https://www.kleinanzeigen.de | `KleinanzeigenParser` | Formerly ebay-kleinanzeigen.de. Desktop URLs only. |
+| https://www.kleinanzeigen.de | `KleinanzeigenParser` | Desktop URLs only. URLs of the former domain ebay-kleinanzeigen.de are rejected, it answers with 410 Gone. |
 | https://www.wg-gesucht.de | `WgGesuchtParser` | Desktop URLs only. |
 
 ---
@@ -29,7 +29,7 @@ Modern .NET 8 crawler that watches classified ads on **kleinanzeigen.de** and **
 ## 🚀 Quick Start
 
 ### 1. Requirements
-- Docker & Docker Compose **or** .NET SDK 8.0+
+- Docker with Compose v2 (`docker compose`, version 2.30 or newer, the Compose secrets read environment variables) **or** .NET SDK 8.0+
 - A Telegram Bot token from [@BotFather](https://core.telegram.org/bots#3-how-do-i-create-a-bot)
 
 ### 2. Prepare environment
@@ -52,8 +52,9 @@ docker compose up -d
 docker compose logs -f bot
 ```
 
-- Grafana: http://localhost:3000 (default `admin` / `GRAFANA_PASSWORD`)
-- Prometheus/Alertmanager/Redis stay inside the Docker network (no exposed ports).
+- Grafana: `http://<docker-host>:3333` (user `admin`, password `GRAFANA_PASSWORD`, required in `.env`)
+- Alerts are sent through the Telegram bot to `ALERT_TELEGRAM_CHAT_ID` (required in `.env`, that chat must have started a conversation with the bot).
+- Prometheus and Redis stay inside the Docker network. The Alertmanager UI is published on `127.0.0.1:9093` only.
 
 Stop everything: `docker compose down`.
 
@@ -97,7 +98,8 @@ Customize the behavior through `.vscode/launch.json`, `.vscode/tasks.json`, or `
 | `SESSION_TIMEOUT_MINUTES` | `15` | Telegram session inactivity timeout. |
 | `DATA_PATH` | `data` | Directory inside container mapped to `./vol`. |
 | `REDIS_CONNECTION_STRING` | `redis:6379,abortConnect=false` | Connection string for URL tracker. |
-| `GRAFANA_PASSWORD` | `admin` | Grafana admin password in docker-compose. |
+| `GRAFANA_PASSWORD` | _required_ | Grafana admin password in docker-compose. |
+| `ALERT_TELEGRAM_CHAT_ID` | _required_ | Telegram chat that receives the alerts in docker-compose. The alerts are sent by the bot of `TELEGRAM_BOT_TOKEN`. |
 
 All environment variables can be set via `.env`, shell exports, or your container orchestrator.
 
@@ -142,20 +144,21 @@ docker-compose.yml               # Full stack definition
 - **Grafana dashboards**: provisioned from `monitoring/grafana/dashboards/kleinanzeigen-crawler.json`.
 - **Alerting**: `monitoring/alerts.yml` defines alerts such as:
   - High parse error rate
+  - Crawler down
   - No subscriptions processed
   - HTTP error spikes / rate limit breaches
   - Notification failures
   - Aggregate error bursts (replacement for legacy Telegram admin notifications)
-- **Alertmanager**: sends webhooks to `http://alert-webhook:8080/alerts` by default. Update this to your Slack/Teams/e-mail gateway.
+- **Alertmanager**: sends the alerts through the Telegram bot to `ALERT_TELEGRAM_CHAT_ID`.
 
 ---
 
 ## 💾 Data & Persistence
 
-- `./vol/Subscribers.json` – subscriber data (multi-user aware).
-- `./vol/logfile.txt` – rolling structured logs.
+- `./data/Subscribers.json` – subscriber data (multi-user aware).
+- `./data/logfile<yyyyMMdd>.txt` – daily rolling logs, 1 MB per file, kept for 90 days.
 - Redis stores processed URL hashes (no JSON fallback).
-- Remove/backup `./vol` to reset subscribers and logs; Redis data persists in `redis-data` volume.
+- Remove/backup `./data` to reset subscribers and logs; Redis data persists in the `kleinanzeigen-bot-redis-data` volume.
 
 ---
 
@@ -166,6 +169,13 @@ dotnet test
 ```
 
 Tests target SessionManager behavior, SubscriptionService validation, ParserBase helpers, etc. Extend the suite when touching business logic.
+
+The alert rules have their own tests:
+
+```bash
+cd monitoring
+docker run --rm -v "$PWD:/w" -w /w --entrypoint promtool prom/prometheus:latest test rules alerts_test.yml
+```
 
 ---
 

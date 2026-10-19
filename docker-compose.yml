@@ -16,8 +16,11 @@ services:
         networks:
           - bot-network
         depends_on:
-          - prometheus
-          - redis
+          prometheus:
+            condition: service_started
+          # The crawler exits on startup if Redis is not reachable yet
+          redis:
+            condition: service_healthy
 
     prometheus:
         image: prom/prometheus:latest
@@ -45,7 +48,8 @@ services:
         ports:
           - "3333:3000"
         environment:
-          - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+          # Grafana is reachable from the network, so there is no default password
+          - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
           - GF_USERS_ALLOW_SIGN_UP=false
           - GF_SERVER_ROOT_URL=http://localhost:3000
         networks:
@@ -54,15 +58,20 @@ services:
           - prometheus
 
     alertmanager:
-        image: prom/alertmanager:latest
+        # chat_id_file in alertmanager.yml requires at least version 0.31
+        image: prom/alertmanager:v0.34.1
         restart: always
         volumes:
           - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
           - kleinanzeigen-bot-alertmanager-data:/alertmanager
+        secrets:
+          - alert_telegram_bot_token
+          - alert_telegram_chat_id
         networks:
           - bot-network
         ports:
-          - "9093:9093"
+          # The Alertmanager UI has no authentication, so it is reachable from this host only
+          - "127.0.0.1:9093:9093"
         command:
           - '--config.file=/etc/alertmanager/alertmanager.yml'
           - '--storage.path=/alertmanager'
@@ -84,6 +93,13 @@ services:
 networks:
   bot-network:
     driver: bridge
+
+# Alertmanager sends alerts through the Telegram bot to the chat ALERT_TELEGRAM_CHAT_ID
+secrets:
+    alert_telegram_bot_token:
+        environment: TELEGRAM_BOT_TOKEN
+    alert_telegram_chat_id:
+        environment: ALERT_TELEGRAM_CHAT_ID
 
 volumes:
     kleinanzeigen-bot-prometheus-data:
