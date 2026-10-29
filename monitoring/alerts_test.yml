@@ -63,7 +63,18 @@ tests:
               provider: Kleinanzeigen
             exp_annotations:
               summary: "High HTTP error rate on Kleinanzeigen"
-              description: "HTTP error rate is 75% over the last 5 minutes"
+              description: "HTTP error rate is 75% over the last 15 minutes"
+  # A short outage of one provider (4 timeouts in a row) must not alert
+  - interval: 1m
+    input_series:
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="WgGesucht",status_code="200",success="true"}'
+        values: '0+1x20 20x10'
+      - series: 'crawler_http_requests_total{job="kleinanzeigen-crawler",provider="WgGesucht",status_code="0",success="false"}'
+        values: '0x10 0+1x4 4x20'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: HighHttpErrorRate
+        exp_alerts: []
   # Active subscriptions without any processed subscription fire ApplicationStuck, even if the counter never existed
   - interval: 1m
     input_series:

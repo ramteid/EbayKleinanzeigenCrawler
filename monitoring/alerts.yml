@@ -34,14 +34,18 @@ groups:
       
       # High HTTP error rate. The rates are summed first, otherwise every failing series would be divided by itself.
       # Status 404 is left out of the failures because deleted ads answer with it regularly.
+      # Transient outages of a provider (a few timeouts in a row) must not alert: the window is 15 minutes,
+      # there must be at least 10 failures in it and the condition must hold for 10 minutes.
       - alert: HighHttpErrorRate
-        expr: sum by (provider) (rate(crawler_http_requests_total{success="false", status_code!="404"}[5m])) / sum by (provider) (rate(crawler_http_requests_total[5m])) > 0.2
-        for: 5m
+        expr: |
+          sum by (provider) (rate(crawler_http_requests_total{success="false", status_code!="404"}[15m])) / sum by (provider) (rate(crawler_http_requests_total[15m])) > 0.2
+          and sum by (provider) (increase(crawler_http_requests_total{success="false", status_code!="404"}[15m])) >= 10
+        for: 10m
         labels:
           severity: warning
         annotations:
           summary: "High HTTP error rate on {{ $labels.provider }}"
-          description: "HTTP error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+          description: "HTTP error rate is {{ $value | humanizePercentage }} over the last 15 minutes"
       
       # Critical: Application appears to be stuck. "or vector(0)" covers a counter that has not been created yet.
       # The window is wide because the request limit of the providers makes a pass over many subscriptions slow,

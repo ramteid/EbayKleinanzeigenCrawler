@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -57,7 +58,19 @@ public class QueryExecutor : IQueryExecutor, IDisposable
         try 
         {
             // Allow retrying once after a 429/Retry-After response was found to avoid temporarily skipping an link
-            var firstTry = await TryHttpRequest(url, provider);
+            (HtmlDocument Document, HttpStatusCode StatusCode) firstTry;
+            try
+            {
+                firstTry = await TryHttpRequest(url, provider);
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException)
+            {
+                // Timeouts and connection errors are usually temporary
+                _logger.Warning("First HTTP attempt failed for {Url}: {Message}", url, e.Message);
+                await Task.Delay(TimeSpan.FromSeconds(5));
+                firstTry = (null, 0);
+            }
+
             if (firstTry.Document is not null)
             {
                 return firstTry.Document;
