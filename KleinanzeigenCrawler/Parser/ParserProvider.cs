@@ -14,7 +14,8 @@ public class ParserProvider : IParserProvider
     {
         // The former domain ebay-kleinanzeigen.de answers with 410 Gone, so it is not supported
         ParserRegistration.ForHostSuffixes("kleinanzeigen", typeof(KleinanzeigenParser), "kleinanzeigen.de"),
-        ParserRegistration.ForHostSuffixes("wg-gesucht", typeof(WgGesuchtParser), "wg-gesucht.de")
+        ParserRegistration.ForHostSuffixes("wg-gesucht", typeof(WgGesuchtParser), "wg-gesucht.de"),
+        ParserRegistration.ForHostSuffixes("wohnverdient", typeof(WohnverdientParser), "wohnverdient.de")
     };
 
     private readonly IServiceProvider _serviceProvider;

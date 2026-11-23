@@ -20,6 +20,7 @@ public class ParserProviderTests
         var services = new ServiceCollection();
         services.AddTransient(_ => new KleinanzeigenParser(Mock.Of<ILogger>(), Mock.Of<IQueryExecutor>()));
         services.AddTransient(_ => new WgGesuchtParser(Mock.Of<ILogger>(), Mock.Of<IQueryExecutor>()));
+        services.AddTransient(_ => new WohnverdientParser(Mock.Of<ILogger>(), Mock.Of<IQueryExecutor>()));
         _parserProvider = new ParserProvider(services.BuildServiceProvider());
     }
 
@@ -27,6 +28,8 @@ public class ParserProviderTests
     [InlineData("https://www.kleinanzeigen.de/s-test/k0", typeof(KleinanzeigenParser))]
     [InlineData("https://kleinanzeigen.de/s-test/k0", typeof(KleinanzeigenParser))]
     [InlineData("https://www.wg-gesucht.de/wg-zimmer-in-Freiburg.html", typeof(WgGesuchtParser))]
+    [InlineData("https://wohnverdient.de/mietangebote/wohnungen/", typeof(WohnverdientParser))]
+    [InlineData("https://www.wohnverdient.de/mietangebote/wohnungen/", typeof(WohnverdientParser))]
     public void GetParser_ShouldReturnParserForSupportedDomainAndItsSubdomains(string url, Type expectedParserType)
     {
         // Act
@@ -41,6 +44,8 @@ public class ParserProviderTests
     [InlineData("https://www.kleinanzeigen.de.example.com/s-test/k0")]
     [InlineData("https://www.not-wg-gesucht.de/wg-zimmer.html")]
     [InlineData("https://www.ebay-kleinanzeigen.de/s-test/k0")]
+    [InlineData("https://www.notwohnverdient.de/mietangebote/wohnungen/")]
+    [InlineData("https://wohnverdient.de.example.com/mietangebote/wohnungen/")]
     public void GetParser_ShouldRejectOtherDomains(string url)
     {
         // Act

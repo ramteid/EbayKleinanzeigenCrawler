@@ -1,6 +1,6 @@
 # Kleinanzeigen Crawler
 
-Modern .NET 9 crawler that watches classified ads on **kleinanzeigen.de** and **wg-gesucht.de**, filters the results using customizable keywords, and notifies subscribers through Telegram (button-based UI) and Signal (text-based UI), which can run at the same time. Prometheus + Grafana dashboards and Alertmanager integrations provide full observability.
+Modern .NET 9 crawler that watches classified ads on **kleinanzeigen.de**, **wg-gesucht.de** and **wohnverdient.de**, filters the results using customizable keywords, and notifies subscribers through Telegram (button-based UI) and Signal (text-based UI), which can run at the same time. Prometheus + Grafana dashboards and Alertmanager integrations provide full observability.
 
 ---
 
@@ -13,7 +13,7 @@ Modern .NET 9 crawler that watches classified ads on **kleinanzeigen.de** and **
 - **Text-based Signal UX** with step-by-step prompts (`/add`, `/list`, `/edit`, ...).
 - **Redis-backed URL deduplication** with SHA256 hashing and a 90-day TTL.
 - **Prometheus metrics, Grafana dashboards, Alertmanager rules** bundled with Docker Compose.
-- **Rate limiting respect**: QueryExecutor throttles requests (40 req / 5 min for Kleinanzeigen).
+- **Rate limiting respect**: QueryExecutor throttles requests per provider (40 req / 5 min for Kleinanzeigen and WG-Gesucht, 30 req / 5 min for Wohnverdient), adds random pauses and a random User-Agent, and honours `Retry-After`.
 - **JSON persistence** for subscriber data (easy to back up with `./data`).
 
 ---
@@ -24,6 +24,7 @@ Modern .NET 9 crawler that watches classified ads on **kleinanzeigen.de** and **
 |----------|--------|-------|
 | https://www.kleinanzeigen.de | `KleinanzeigenParser` | Desktop URLs only. URLs of the former domain ebay-kleinanzeigen.de are rejected, it answers with 410 Gone. |
 | https://www.wg-gesucht.de | `WgGesuchtParser` | Desktop URLs only. |
+| https://wohnverdient.de | `WohnverdientParser` | Use the URL without `www` (it redirects to plain http, which is not followed). Only the first result page is read, because robots.txt disallows the pagination; add `sort_field=published_at` to the URL so the newest ads are on it. |
 
 ---
 

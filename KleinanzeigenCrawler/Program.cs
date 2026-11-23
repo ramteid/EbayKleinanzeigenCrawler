@@ -128,6 +128,10 @@ public class Program
             sp.GetService<ILogger>(),
             sp.GetService<IQueryExecutor>(),
             sp.GetService<MetricsService>()));
+        serviceCollection.AddTransient<WohnverdientParser>(sp => new WohnverdientParser(
+            sp.GetService<ILogger>(),
+            sp.GetService<IQueryExecutor>(),
+            sp.GetService<MetricsService>()));
         serviceCollection.AddSingleton<IParserProvider, ParserProvider>();
 
         // Business services

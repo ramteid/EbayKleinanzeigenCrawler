@@ -130,7 +130,7 @@ public class SubscriptionService
                 parser = _parserProvider.GetParser(subscription);
                 if (parser == null)
                 {
-                    return ServiceResult<Subscription>.Fail("No parser found for this URL. Supported sites: kleinanzeigen.de, wg-gesucht.de");
+                    return ServiceResult<Subscription>.Fail("No parser found for this URL. Supported sites: kleinanzeigen.de, wg-gesucht.de, wohnverdient.de");
                 }
             }
             catch (Exception ex)

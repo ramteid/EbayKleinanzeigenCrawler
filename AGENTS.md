@@ -9,7 +9,7 @@ This document is written for automation agents that need a fast, accurate view o
 Kleinanzeigen Crawler is a .NET 9 console application that:
 
 - Reads subscription definitions from Telegram and Signal conversations.
-- Periodically queries Kleinanzeigen and WG-Gesucht search URLs.
+- Periodically queries Kleinanzeigen, WG-Gesucht and Wohnverdient search URLs.
 - Applies include/exclude keyword filtering against ad titles/descriptions.
 - Notifies subscribers via Telegram and/or Signal (both can run at the same time) when new matches appear.
 - Exposes Prometheus-compatible metrics and ships with a Grafana/Alertmanager stack.
@@ -68,7 +68,7 @@ The application is designed to run continuously inside Docker. A Redis instance 
 | `AccessGate` | `Manager/AccessGate.cs` | Decides for every incoming message whether the sender may use the bot (one instance per messenger channel, used by `TelegramManager` and `TextConversationHandler`). Subscribers always pass. With `ACCESS_PASSWORD`, a new user must send the password once to become a subscriber; 10 wrong passwords block the user for good and the bot does not answer its messages anymore. `ALLOW_NEW_USERS=false` rejects new users before the password is asked. |
 | `SubscriptionService` | `Manager/SubscriptionService.cs` | Business logic for validating URLs and titles, enforcing result limits, registering subscribers and updating subscriber data. One instance per messenger channel. |
 | `SubscriptionHandler` | `Subscriptions/SubscriptionHandler.cs` | Infinite loop that queries subscriptions, feeds parsers, matches results, calls the notifier. |
-| `ParserProvider` & `ParserBase` | `Parser/` | Provides parser implementations (Kleinanzeigen & WG-Gesucht) with consistent rate limiting and error handling. |
+| `ParserProvider` & `ParserBase` | `Parser/` | Provides parser implementations (Kleinanzeigen, WG-Gesucht & Wohnverdient) with consistent rate limiting and error handling. |
 | `RedisUrlTracker` | `Persistence/RedisUrlTracker.cs` | SHA256 hashes of processed URLs with 90-day TTL, prevents duplicate notifications. |
 | `SubscriptionPersistence` & `JsonStorage` | `Persistence/` | Thread-safe JSON persistence of `Subscriber` objects under `./data`. |
 | `AccessAttemptPersistence` | `Persistence/AccessAttemptPersistence.cs` | Failed password attempts of users who are not subscribers, persisted in `./data/AccessAttempts.json` so that blocks survive restarts. |
@@ -218,6 +218,7 @@ The dev container (`.devcontainer/`: .NET 9 SDK plus a `redis` service) provides
 - **Mobile URLs**: subscription creation rejects non-HTTPS desktop URLs.
 - **Too many results**: subscriptions with >50 estimated results are rejected to protect the provider.
 - **Rate limiting**: if you see 429/Retry-After, the QueryExecutor automatically backs off, but excessive subscriptions may still breach limits.
+- **Wohnverdient**: the site is behind Cloudflare and answers an empty `User-Agent` with 403, so the User-Agent header must always be sent (`QueryExecutor` does). It publishes no request limit, the parser keeps to 30 requests per 5 minutes. Only the first result page is read, because robots.txt disallows `/seite-N/`: put `sort_field=published_at` into the search URL. Subscription URLs must not use `www.` (redirect to plain http is not followed, the log says so). An ad that was deleted redirects to the category list, which shows up as `Could not parse title`. A search URL is built by the site's form: `/<mietangebote|kaufangebote>/<wohnungen|haeuser|...>/<plz>-<ort>-deutschland/?sort_field=published_at&mile=<id>&rooms_from_min=<id>` (ids come from the filter form, e.g. `mile=7731` is 5 km, `rooms_from_min=8028` is 3 rooms).
 - **Alert delivery**: the alert chat must have started a conversation with the bot, otherwise Telegram rejects the alert messages (see `docker compose logs alertmanager`).
 - **Data path**: `DATA_PATH` should stay inside the mounted volume (`./data`) or data will be lost when the container restarts.
 - **Signal number**: use a dedicated number; everybody who writes to it talks to the bot unless `ACCESS_PASSWORD` is set. The number must be registered with the `signal-api` container, which must run in `json-rpc` mode, otherwise the bot logs the reason and keeps retrying.

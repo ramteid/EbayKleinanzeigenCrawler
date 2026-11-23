@@ -21,7 +21,7 @@ public class MessageFormatter
 I'll help you monitor classified ads and notify you about new matches.
 
 🔍 <b>What I can do:</b>
-• Monitor Kleinanzeigen and WG-Gesucht
+• Monitor Kleinanzeigen, WG-Gesucht and Wohnverdient
 • Filter by keywords
 • Send instant notifications
 • Manage multiple subscriptions
@@ -204,7 +204,8 @@ Please paste the search URL from your browser.
 
 Supported sites:
 • kleinanzeigen.de
-• wg-gesucht.de";
+• wg-gesucht.de
+• wohnverdient.de";
     }
     
     /// <summary>

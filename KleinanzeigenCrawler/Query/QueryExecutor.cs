@@ -52,8 +52,9 @@ public class QueryExecutor : IQueryExecutor, IDisposable
         _logger.Information($"Loading URL: {url}");
         
         // Derive provider from URL
-        var provider = url.Host.Contains("kleinanzeigen") ? "Kleinanzeigen" : 
-                       url.Host.Contains("wg-gesucht") ? "WgGesucht" : "Unknown";
+        var provider = url.Host.Contains("kleinanzeigen") ? "Kleinanzeigen" :
+                       url.Host.Contains("wg-gesucht") ? "WgGesucht" :
+                       url.Host.Contains("wohnverdient") ? "Wohnverdient" : "Unknown";
 
         try 
         {

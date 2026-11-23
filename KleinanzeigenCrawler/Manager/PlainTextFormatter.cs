@@ -26,7 +26,7 @@ public static class PlainTextFormatter
         return $"""
             Welcome to the Kleinanzeigen Crawler.
 
-            I watch searches on kleinanzeigen.de and wg-gesucht.de and message you as soon as new matching ads appear.
+            I watch searches on kleinanzeigen.de, wg-gesucht.de and wohnverdient.de and message you as soon as new matching ads appear.
 
             {Commands}
             """;
@@ -52,7 +52,7 @@ public static class PlainTextFormatter
 
             Step 1 of 5: search URL
 
-            Open your search on kleinanzeigen.de or wg-gesucht.de in a desktop browser, apply all filters and send me the URL (HTTPS only).
+            Open your search on kleinanzeigen.de, wg-gesucht.de or wohnverdient.de in a desktop browser, apply all filters and send me the URL (HTTPS only).
 
             Send /cancel to abort.
             """;
